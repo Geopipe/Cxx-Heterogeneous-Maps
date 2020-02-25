@@ -18,7 +18,7 @@
  *
  ************************************************************************************/
 
-#include <geopipe/util/dynamic-hmap.hpp>
+#include <hmap/dynamic-hmap.hpp>
 
 
 namespace detail {
