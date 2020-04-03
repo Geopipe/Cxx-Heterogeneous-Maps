@@ -45,11 +45,25 @@ namespace detail {
 	}
 }
 
+// Copy Constructor
 DynamicHMap::DynamicHMap(const DynamicHMap& other)
 : map_(other.map_) {}
 
+// Move Constructor
 DynamicHMap::DynamicHMap(DynamicHMap&& other)
 : map_(std::move(other.map_)) {}
+
+// Copy Assignment Operator
+DynamicHMap& DynamicHMap::operator=(const DynamicHMap& other) {
+	map_ = other.map_;
+	return *this;
+}
+
+// Move Assignment Operator
+DynamicHMap& DynamicHMap::operator=(DynamicHMap&& other) {
+	map_ = std::move(other.map_);
+	return *this;
+}
 
 DynamicHMap::iterator DynamicHMap::begin() {
 	return map_.begin();

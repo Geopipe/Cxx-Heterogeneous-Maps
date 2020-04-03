@@ -108,9 +108,13 @@ private:
 	
 public:
 	
-	DynamicHMap(const DynamicHMap& other);
-	DynamicHMap(DynamicHMap&& other);
+	DynamicHMap(const DynamicHMap& other); // Copy Constructor
+	DynamicHMap(DynamicHMap&& other); // Move Constructor
 	
+	DynamicHMap& operator=(const DynamicHMap& other); // Copy Assignment Operator
+	DynamicHMap& operator=(DynamicHMap&& other); // Move Assignment Operator
+
+
 	template<typename ...Args>
 	DynamicHMap(Args&& ...args)
 	: map_(std::forward<Args>(args) ...) {}
@@ -127,6 +131,18 @@ public:
 	
 	// Doesn't currently support various "fancy" operations
 	// If you want it, add it.
+	
+	template<typename V>
+	V& at(const detail::Key<V>& k) {
+		// This will throw if it's not an appropriate type
+		return std::any_cast<V&>(map_.at(k));
+	}
+
+	template<typename V>
+	const V& at(const detail::Key<V>& k) const {
+		// This will throw if it's not an appropriate type
+		return std::any_cast<const V&>(map_.at(k));
+	}
 	
 	iterator begin();
 	iterator end();
