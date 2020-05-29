@@ -27,8 +27,12 @@
 #include <typeinfo>
 #include <utility>
 #include <algorithm>
+#include <tuple>
+#include <functional>
+#include <type_traits>
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <boost/optional/optional.hpp>
 
 namespace detail {
 	struct KeyTagBase {
@@ -72,53 +76,172 @@ namespace detail {
 		: KeyBase(k) {}
 		
 		template<class A>
-		std::pair<const KeyBase, std::any> operator,(A&& a) const {
-			auto ret = std::pair<KeyBase, std::any>(*this, std::any());
-			ret.second = V(std::forward<A>(a)); // Does this work better than emplace?
-			return ret;
+		std::pair<std::reference_wrapper<const Key<V> >, V> operator,(A&& a) const {
+		    return std::make_pair(std::cref(*this), std::forward<A>(a));
 		}
 	};
 }
 
 class DynamicHMap {
 	std::map<detail::KeyBase, std::any> map_;
-	
+
 public:
 	using value_type = decltype(map_)::value_type;
 	using iterator = decltype(map_)::iterator;
 	using const_iterator = decltype(map_)::const_iterator;
-	
+
 	template<typename V> using specific_value_type = std::pair<detail::KeyBase, V&>;
 	template<typename V> using const_specific_value_type = std::pair<detail::KeyBase, const V&>;
+
+	template<typename ...Vs>
+    friend DynamicHMap make_dynamic_hmap(Vs&& ...vs);
+
 private:
-	
+
 	template<typename V>
 	struct AnyCaster {
 		specific_value_type<V> operator()(value_type &v) const {
 			return specific_value_type<V>(v.first, std::any_cast<V&>(v.second));
 		}
 	};
-	
+
 	template<typename V>
 	struct ConstAnyCaster {
 		const_specific_value_type<V> operator()(const value_type &v) const {
 			return const_specific_value_type<V>(v.first, std::any_cast<const V&>(v.second));
 		}
 	};
-	
-public:
-	
-	DynamicHMap(const DynamicHMap& other); // Copy Constructor
-	DynamicHMap(DynamicHMap&& other); // Move Constructor
-	
-	DynamicHMap& operator=(const DynamicHMap& other); // Copy Assignment Operator
-	DynamicHMap& operator=(DynamicHMap&& other); // Move Assignment Operator
+
+    template <typename V>
+    auto extractOne(const detail::Key<V>& k) -> decltype(std::make_pair(k, std::move(map_.extract(k)))) {
+        return std::make_pair(k, std::move(map_.extract(k)));
+    }
+
+	template <typename V>
+	boost::optional<V> optCheckOutOne(const detail::Key<V>& k) {
+		boost::optional<V> retval;
+		auto mapNodeHandle = map_.extract(k);
+		if (mapNodeHandle &&
+		    (&(mapNodeHandle.key().tag) == &(const detail::KeyTagBase&)KeyTag<V>::tag())) {
+			retval.emplace(std::any_cast<V&&>(std::move(mapNodeHandle.mapped())));
+		}
+		return retval;
+	}
+
+    template <typename... DataTypes, typename... Args, size_t... Is>
+    void insertHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
+        (static_cast<void>(insertOne(args, std::get<Is>(dataTup).first, std::move(std::get<Is>(dataTup).second))), ...);
+    }
+
+	// Insert values from a compatible node handle into the map
+	template <typename V, typename W, typename X>
+	void insertOne(const detail::Key<V>& k, const detail::Key<W>& kPrime, X&& node_handle) {
+		if constexpr (std::is_convertible_v<W, V>) {
+		    if (node_handle) {
+			    if constexpr (std::is_same<decltype(map_.get_allocator()),
+			                               decltype(node_handle.get_allocator())>::value) {
+				     if (map_.get_allocator() == node_handle.get_allocator()) {
+				         if (k == kPrime) {
+							 map_.insert(std::move(node_handle));
+						 } else {
+				             map_.try_emplace(k, std::move(node_handle.mapped()));
+				         }
+				    } else {
+				         // Make sure we copy the value
+					     map_.try_emplace(k, node_handle.mapped());
+				    }
+			    } else {
+					// Make sure we copy the value
+					map_.try_emplace(k, node_handle.mapped());
+				}
+			}
+		}
+	}
+
+    template <typename... DataTypes, typename... Args, size_t... Is>
+    void optCheckInHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
+        (static_cast<void>(optCheckInOne(std::move(std::get<Is>(dataTup)), args)), ...);
+    }
+
+	template <typename V>
+	void optCheckInOne(boost::optional<V>&& arg, const detail::Key<V>& k) {
+		if (boost::none != arg) {
+                std::any& vHolder = map_[k];
+                if (!vHolder.has_value()) {
+                    vHolder.emplace<V>();  // The type must be default constructible
+                }
+                V& vRef = std::any_cast<V&>(vHolder);
+			    vRef = std::move(arg).value();
+		}
+	}
+
+	template <typename V>
+	std::shared_ptr<V> shrCheckOutOne(const detail::Key<std::shared_ptr<V>>& k) {
+		std::shared_ptr<V> retval;
+		auto mapNodeHandle = map_.extract(k);
+		if (mapNodeHandle && (&(mapNodeHandle.key().tag) ==
+		                      &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V>>::tag())) {
+			retval = std::any_cast<std::shared_ptr<V>&&>(std::move(mapNodeHandle.mapped()));
+		}
+		return retval;
+	}
+
+	template <typename V>
+	std::shared_ptr<V> shrCopyOutOne(const detail::Key<std::shared_ptr<V>>& k) {
+		std::shared_ptr<V> retval;
+		if (&(k.tag) == &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V>>::tag()) 
+		  {
+		    if (auto it = map_.find(k); map_.end() != it) 
+		      {
+			retval = std::any_cast<std::shared_ptr<V> >(it->second);
+		      }
+		  }
+		return retval;
+	}
+
+	template <typename V>
+	std::shared_ptr<V> shrCopyOutOne(const detail::Key<std::shared_ptr<V>>& k) const {
+		std::shared_ptr<const V> retval;
+		if (&(k.tag) == &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V>>::tag()) 
+		  {
+		    if (auto it = map_.find(k); map_.end() != it) 
+		      {
+			retval = std::any_cast<std::shared_ptr<const V> >(it->second);
+		      }
+		  }
+		return retval;
+	}
+
+    template <typename V>
+    void shrCheckInOne(std::shared_ptr<V>&& arg, const detail::Key<std::shared_ptr<V> >& k) {
+        if (nullptr != arg) {
+            std::any& sharedVHolder = map_[k];
+            if (!sharedVHolder.has_value()) {
+                sharedVHolder.emplace<std::shared_ptr<V> >();  // The type must be default constructible
+            }
+            std::shared_ptr<V>& sharedVRef = std::any_cast<std::shared_ptr<V>& >(sharedVHolder);
+            sharedVRef = std::move(arg);
+        }
+    }
+
+    template <typename... DataTypes, typename... Args, size_t... Is>
+    void shrCheckInHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
+        (static_cast<void>(shrCheckInOne(std::move(std::get<Is>(dataTup)), args)), ...);
+    }
+
+  public:
+
+	DynamicHMap(const DynamicHMap& other);  // Copy Constructor
+	DynamicHMap(DynamicHMap&& other);       // Move Constructor
+
+	DynamicHMap& operator=(const DynamicHMap& other);  // Copy Assignment Operator
+	DynamicHMap& operator=(DynamicHMap&& other);       // Move Assignment Operator
 
 
 	template<typename ...Args>
 	DynamicHMap(Args&& ...args)
 	: map_(std::forward<Args>(args) ...) {}
-	
+
 	template<typename V>
 	V& operator[](const detail::Key<V>& k) {
 		std::any& vHolder = map_[k];
@@ -128,10 +251,10 @@ public:
 		// This will throw if it's not an appropriate type
 		return std::any_cast<V&>(vHolder);
 	}
-	
+
 	// Doesn't currently support various "fancy" operations
 	// If you want it, add it.
-	
+
 	template<typename V>
 	V& at(const detail::Key<V>& k) {
 		// This will throw if it's not an appropriate type
@@ -143,8 +266,59 @@ public:
 		// This will throw if it's not an appropriate type
 		return std::any_cast<const V&>(map_.at(k));
 	}
-	
-	iterator begin();
+
+    template <typename... Args>
+    auto extract(Args&&... args) {
+        return std::make_tuple(extractOne(args)...);
+    }
+
+    template<typename ...Types, typename ...Args>
+    void insert(std::tuple<Types...> &&tup,
+                    Args&& ...args) {
+        insertHelper(std::forward<std::tuple<Types...> >(std::move(tup)),
+                     std::index_sequence_for<Args...>{},
+                     std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+	auto optCheckOut(Args&&... args) {
+		return std::make_tuple(optCheckOutOne(args)...);
+	}
+
+    template<typename ...Types, typename ...Args>
+    void optCheckIn(std::tuple<Types...> &&tup,
+                    Args&& ...args) {
+        optCheckInHelper(std::forward<std::tuple<Types...> >(std::move(tup)),
+                         std::index_sequence_for<Args...>{},
+                         std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto shrCheckOut(Args&&... args) {
+        return std::make_tuple(shrCheckOutOne(args)...);
+    }
+
+    template <typename... Args>
+    auto shrCopyOut(Args&&... args)
+    {
+        return std::make_tuple(shrCopyOutOne(args)...);
+    }
+
+    template <typename... Args>
+    auto shrCopyOut(Args&&... args) const 
+    {
+        return std::make_tuple(shrCopyOutOne(args)...);
+    }
+
+    template<typename ...Types, typename ...Args>
+    void shrCheckIn(std::tuple<Types...> &&tup,
+                    Args&& ...args) {
+        shrCheckInHelper(std::forward<std::tuple<Types...> >(std::move(tup)),
+                         std::index_sequence_for<Args...>{},
+                         std::forward<Args>(args)...);
+    }
+
+    iterator begin();
 	iterator end();
 	template<typename V>
 	auto end() {
@@ -189,11 +363,26 @@ public:
 };
 
 template<typename V>
-detail::Key<V> dK(const std::string&k){
+detail::Key<V> dK(const std::string& k){
 	return detail::Key<V>(k);
+}
+
+template<typename V>
+detail::Key<std::shared_ptr<V> > dSK(const std::string& k){
+  return detail::Key<std::shared_ptr<V> >(k);
+}
+
+template<typename V>
+detail::Key<std::unique_ptr<V> > dUK(const std::string& k){
+  return detail::Key<std::unique_ptr<V> >(k);
 }
 
 template<typename ...Vs>
 DynamicHMap make_dynamic_hmap(Vs&& ...vs) {
-	return DynamicHMap((std::initializer_list<std::pair<const detail::KeyBase, std::any>>){std::forward<Vs>(vs)...});
+    DynamicHMap hmap;
+    (static_cast<void>([&hmap](auto commaPair) {
+			 hmap.map_.try_emplace(commaPair.first,
+					       std::move(commaPair.second));
+		       }(vs)), ...);
+    return hmap;
 };
