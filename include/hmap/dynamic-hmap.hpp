@@ -117,16 +117,16 @@ private:
         return std::make_pair(k, std::move(map_.extract(k)));
     }
 
-	template <typename V>
-	boost::optional<V> optCheckOutOne(const detail::Key<V>& k) {
-		boost::optional<V> retval;
-		auto mapNodeHandle = map_.extract(k);
-		if (mapNodeHandle &&
-		    (&(mapNodeHandle.key().tag) == &(const detail::KeyTagBase&)KeyTag<V>::tag())) {
-			retval.emplace(std::any_cast<V&&>(std::move(mapNodeHandle.mapped())));
-		}
-		return retval;
+    template <typename V>
+    boost::optional<V> optCheckOutOne(const detail::Key<V>& k) {
+        boost::optional<V> retval;
+	auto mapNodeHandle = map_.extract(k);
+	if (mapNodeHandle &&
+	    (&(mapNodeHandle.key().tag) == &(const detail::KeyTagBase&)KeyTag<V>::tag())) {
+	  retval.emplace(std::any_cast<V&&>(std::move(mapNodeHandle.mapped())));
 	}
+	return retval;
+    }
 
     template <typename... DataTypes, typename... Args, size_t... Is>
     void insertHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
@@ -158,6 +158,19 @@ private:
 		}
 	}
 
+    template <typename V>
+    boost::optional<V> optCopyOutOne(const detail::Key<V>& k) {
+        boost::optional<V> retval;
+	if (&(k.tag) == &(const detail::KeyTagBase&)KeyTag<V>::tag())
+	{
+	    if (auto it = map_.find(k); map_.end() != it) 
+	    {
+	        retval = std::any_cast<V>(it->second);
+	    }
+	}
+	return retval;
+    }
+
     template <typename... DataTypes, typename... Args, size_t... Is>
     void optCheckInHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
         (static_cast<void>(optCheckInOne(std::move(std::get<Is>(dataTup)), args)), ...);
@@ -176,20 +189,20 @@ private:
 	}
 
 	template <typename V>
-	std::shared_ptr<V> shrCheckOutOne(const detail::Key<std::shared_ptr<V>>& k) {
+	std::shared_ptr<V> shrCheckOutOne(const detail::Key<std::shared_ptr<V> >& k) {
 		std::shared_ptr<V> retval;
 		auto mapNodeHandle = map_.extract(k);
 		if (mapNodeHandle && (&(mapNodeHandle.key().tag) ==
-		                      &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V>>::tag())) {
+		                      &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V> >::tag())) {
 			retval = std::any_cast<std::shared_ptr<V>&&>(std::move(mapNodeHandle.mapped()));
 		}
 		return retval;
 	}
 
 	template <typename V>
-	std::shared_ptr<V> shrCopyOutOne(const detail::Key<std::shared_ptr<V>>& k) {
+	std::shared_ptr<V> shrCopyOutOne(const detail::Key<std::shared_ptr<V> >& k) {
 		std::shared_ptr<V> retval;
-		if (&(k.tag) == &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V>>::tag()) 
+		if (&(k.tag) == &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V> >::tag()) 
 		  {
 		    if (auto it = map_.find(k); map_.end() != it) 
 		      {
@@ -200,9 +213,9 @@ private:
 	}
 
 	template <typename V>
-	std::shared_ptr<V> shrCopyOutOne(const detail::Key<std::shared_ptr<V>>& k) const {
+	std::shared_ptr<const V> shrCopyOutOne(const detail::Key<std::shared_ptr<V> >& k) const {
 		std::shared_ptr<const V> retval;
-		if (&(k.tag) == &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V>>::tag()) 
+		if (&(k.tag) == &(const detail::KeyTagBase&)KeyTag<std::shared_ptr<V> >::tag()) 
 		  {
 		    if (auto it = map_.find(k); map_.end() != it) 
 		      {
@@ -281,9 +294,15 @@ private:
     }
 
     template <typename... Args>
-	auto optCheckOut(Args&&... args) {
-		return std::make_tuple(optCheckOutOne(args)...);
-	}
+    auto optCheckOut(Args&&... args) {
+        return std::make_tuple(optCheckOutOne(args)...);
+    }
+
+    template <typename... Args>
+    auto optCopyOut(Args&&... args)
+    {
+        return std::make_tuple(optCopyOutOne(args)...);
+    }
 
     template<typename ...Types, typename ...Args>
     void optCheckIn(std::tuple<Types...> &&tup,
@@ -322,14 +341,14 @@ private:
 	iterator end();
 	template<typename V>
 	auto end() {
-		return boost::make_transform_iterator<AnyCaster<V>>(end());
+		return boost::make_transform_iterator<AnyCaster<V> >(end());
 	}
 	
 	const_iterator cbegin() const;
 	const_iterator cend() const;
 	template<typename V>
 	auto cend() const {
-		return boost::make_transform_iterator<ConstAnyCaster<V>>(cend());
+		return boost::make_transform_iterator<ConstAnyCaster<V> >(cend());
 	}
 	
 	size_t size() const;
@@ -340,14 +359,14 @@ private:
 	auto find(const detail::Key<V>& k) {
 		iterator found = map_.find(k);
 		iterator theEnd = end();
-		return boost::make_transform_iterator<AnyCaster<V>>(((found == theEnd) || (&(found->first.tag) != &(const detail::KeyTagBase&)KeyTag<V>::tag())) ? theEnd : found);
+		return boost::make_transform_iterator<AnyCaster<V> >(((found == theEnd) || (&(found->first.tag) != &(const detail::KeyTagBase&)KeyTag<V>::tag())) ? theEnd : found);
 	}
 	
 	template<typename V>
 	auto find(const detail::Key<V>& k) const {
 		const_iterator found = map_.find(k);
 		const_iterator theEnd = cend();
-		return boost::make_transform_iterator<ConstAnyCaster<V>>(((found == theEnd) || (&(found->first.tag) != &(const detail::KeyTagBase&)KeyTag<V>::tag())) ? theEnd : found);
+		return boost::make_transform_iterator<ConstAnyCaster<V> >(((found == theEnd) || (&(found->first.tag) != &(const detail::KeyTagBase&)KeyTag<V>::tag())) ? theEnd : found);
 	}
 	
 	template<typename V>
