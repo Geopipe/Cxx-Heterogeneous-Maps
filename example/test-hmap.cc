@@ -57,29 +57,16 @@ int main(int argc, const char* argv[]) {
 		myMap.optCheckIn(std::move(tup), dK<std::string>("cusp"),
 				 dK<std::string>("baz"));
 	}
-	{
-	  auto myMap = make_dynamic_hmap((dSK<std::string>("baz"),std::make_shared<std::string>("goodbye")));
-	  auto tup = myMap.shrCheckOut(dSK<std::string>("cusp"),
-				       dSK<std::string>("baz"));
-	  auto &[cusp, baz] = tup;
-	  std::cout << (cusp ? cusp->c_str() : "\"cusp\" is not in map") << std::endl;
-	  std::cout << (baz ? baz->c_str() : "\"baz\" is not in map") << std::endl;
-	  myMap.shrCheckIn(std::move(tup), dSK<std::string>("cusp"),
-                         dSK<std::string>("baz"));
-	}
     {
         auto myMap = make_dynamic_hmap((dSK<std::string>("baz"),std::make_shared<std::string>("goodbye")));
         auto myMap2 = make_dynamic_hmap();
         myMap2.insert(myMap.extract(dSK<std::string>("baz"), dSK<std::string>("cusp")), dSK<std::string>("baz"),
                 dSK<std::string>("cusp"));
-        auto tup = myMap2.shrCheckOut(dSK<std::string>("cusp"),
-                                     dSK<std::string>("baz"));
-        auto &[cusp, baz] = tup;
-        std::cout << (cusp ? cusp->c_str() : "\"cusp\" is not in map") << std::endl;
-        std::cout << (baz ? baz->c_str() : "\"baz\" is not in map") << std::endl;
-        myMap.shrCheckIn(std::move(tup), dSK<std::string>("cusp"),
-                         dSK<std::string>("baz"));
+        auto tup = myMap2.optCheckOut(dSK<std::string>("cusp"),
+				      dSK<std::string>("baz"));
+        auto &[optCusp, optBaz] = tup;
+        std::cout << (optCusp ? (*optCusp)->c_str() : "\"cusp\" is not in map") << std::endl;
+        std::cout << (optBaz ? (*optBaz)->c_str() : "\"baz\" is not in map") << std::endl;
     }
-
-	return 0;
+    return 0;
 }
