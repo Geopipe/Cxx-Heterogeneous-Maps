@@ -122,8 +122,7 @@ private:
     boost::optional<V> optCheckOutOne(const detail::Key<V>& k) {
         boost::optional<V> retval;
 	auto mapNodeHandle = map_.extract(k);
-	if (mapNodeHandle &&
-	    (&(mapNodeHandle.key().tag.get()) == &(const detail::KeyTagBase&)KeyTag<V>::tag())) {
+	if (mapNodeHandle) {
 	  retval.emplace(std::any_cast<V&&>(std::move(mapNodeHandle.mapped())));
 	}
 	return retval;
@@ -162,20 +161,16 @@ private:
 	template <typename V>
 	boost::optional<const V&> optCopyOutOne(const detail::Key<V>& k) const {
 		boost::optional<const V&> retval;
-		if (&(k.tag.get()) == &(const detail::KeyTagBase&)KeyTag<V>::tag()) {
-			if (auto it = map_.find(k); map_.cend() != it) {
-				retval.emplace(std::any_cast<const V&>(map_.at(k)));
-			}
+		if (auto it = map_.find(k); map_.cend() != it) {
+			retval.emplace(std::any_cast<const V&>(map_.at(k)));
 		}
 		return retval;
 	}
 	template <typename V>
 	boost::optional<V&> optCopyOutOne(const detail::Key<V>& k) {
 		boost::optional<V&> retval;
-		if (&(k.tag.get()) == &(const detail::KeyTagBase&)KeyTag<V>::tag()) {
-			if (auto it = map_.find(k); map_.end() != it) {
-				retval.emplace(std::any_cast<V&>(map_.at(k)));
-			}
+		if (auto it = map_.find(k); map_.end() != it) {
+			retval.emplace(std::any_cast<V&>(map_.at(k)));
 		}
 		return retval;
 	}
@@ -319,20 +314,20 @@ template <typename... DataTypes, typename... Args, size_t... Is>
 	auto find(const detail::Key<V>& k) {
 		iterator found = map_.find(k);
 		iterator theEnd = end();
-		return boost::make_transform_iterator<AnyCaster<V> >(((found == theEnd) || (&(found->first.tag.get()) != &(const detail::KeyTagBase&)KeyTag<V>::tag())) ? theEnd : found);
+		return boost::make_transform_iterator<AnyCaster<V> >((found == theEnd) ? theEnd : found);
 	}
 	
 	template<typename V>
 	auto find(const detail::Key<V>& k) const {
 		const_iterator found = map_.find(k);
 		const_iterator theEnd = cend();
-		return boost::make_transform_iterator<ConstAnyCaster<V> >(((found == theEnd) || (&(found->first.tag.get()) != &(const detail::KeyTagBase&)KeyTag<V>::tag())) ? theEnd : found);
+		return boost::make_transform_iterator<ConstAnyCaster<V> >((found == theEnd) ? theEnd : found);
 	}
 	
 	template<typename V>
 	size_t erase(const detail::Key<V>& k) {
 		auto found = map_.find(k);
-		if((found == map_.end()) || (&(found->first.tag.get()) != &(const detail::KeyTagBase&)KeyTag<V>::tag())) {
+		if(found == map_.end()) {
 			return 0;
 		} else {
 			map_.erase(found);

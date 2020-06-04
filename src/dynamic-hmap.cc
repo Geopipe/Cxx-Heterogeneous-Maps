@@ -33,15 +33,15 @@ namespace detail {
 	KeyBase::~KeyBase() {}
 	
 	bool KeyBase::operator<(const KeyBase &k) const {
-		return key < k.key;
+		return key < k.key || (key == k.key && &(tag.get()) < &(k.tag.get()));
 	}
 	
 	bool KeyBase::operator==(const KeyBase &k) const {
-		return key == k.key;
+		return key == k.key && &(tag.get()) == &(k.tag.get());
 	}
 	
 	bool KeyBase::operator!=(const KeyBase &k) const {
-		return key != k.key;
+		return key != k.key || &(tag.get()) != &(k.tag.get());
 	}
 }
 
