@@ -25,7 +25,7 @@ namespace detail {
 	KeyTagBase::~KeyTagBase() {}
 	
 	KeyBase::KeyBase(const std::string &ki, const KeyTagBase& ti)
-	: key(ki), tag(ti) {}
+	: key(ki), tag(std::cref(ti)) {}
 	
 	KeyBase::KeyBase(const KeyBase &k)
 	: key(k.key), tag(k.tag) {}
