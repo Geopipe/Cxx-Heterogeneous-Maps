@@ -19,17 +19,17 @@
  *
  ************************************************************************************/
 
+#include <algorithm>
 #include <any>
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
-#include <typeinfo>
-#include <utility>
-#include <algorithm>
 #include <tuple>
-#include <functional>
+#include <typeinfo>
 #include <type_traits>
+#include <utility>
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/optional/optional.hpp>
