@@ -2,6 +2,7 @@
 #include <hmap/dynamic-hmap.hpp>
 
 #include <iostream>
+#include <string_view>
 
 
 int main(int argc, const char* argv[]) {
@@ -66,9 +67,17 @@ int main(int argc, const char* argv[]) {
 		              dSK<std::string>("cusp"));
 		auto tup = myMap2.optCheckOut(dSK<std::string>("cusp"),
 		                              dSK<std::string>("baz"));
+		// std::string_view is an "impedance matching" wrapper class
+		// for std::string, a null-terminated C string and a C char[]
+		// with a character count.  To feed operator<<, we will map the
+		// boost::optional<std::shared_ptr<std::string> > to a
+		// boost::optional<std::string_view> and C++ will do the rest.
+		auto make_view = [](const std::shared_ptr<std::string>& mem)
+		    { return std::string_view(*mem); };
+
 		auto &[optCusp, optBaz] = tup;
-		std::cout << (optCusp ? (*optCusp)->c_str() : "\"cusp\" is not in map") << std::endl;
-		std::cout << (optBaz ? (*optBaz)->c_str() : "\"baz\" is not in map") << std::endl;
+		std::cout << optCusp.map(make_view).value_or("\"cusp\" is not in map") << std::endl;
+		std::cout << optBaz.map(make_view).value_or("\"baz\" is not in map") << std::endl;
 	}
 	return 0;
 }
