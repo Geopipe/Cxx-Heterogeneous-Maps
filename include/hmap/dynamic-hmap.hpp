@@ -357,7 +357,8 @@ template<typename ...Vs>
 DynamicHMap make_dynamic_hmap(Vs&& ...vs) {
 	DynamicHMap hmap;
 	(static_cast<void>([&hmap](auto commaPair) {
-	                       hmap.map_.emplace(std::move(commaPair));
+	                       hmap.map_.try_emplace(commaPair.first,
+	                                             std::move(commaPair.second));
 	                       }(vs)),
 	    ...);
 	return hmap;
