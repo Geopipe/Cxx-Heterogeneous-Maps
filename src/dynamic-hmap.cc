@@ -20,49 +20,11 @@
 
 #include <hmap/dynamic-hmap.hpp>
 
-
+// The vtables for these classes will be generated here
 namespace detail {
 	KeyTagBase::~KeyTagBase() {}
 	
-	KeyBase::KeyBase(const std::string &ki, const KeyTagBase& ti)
-	: key(ki), tag(std::cref(ti)) {}
-	
-	KeyBase::KeyBase(const KeyBase &k)
-	: key(k.key), tag(k.tag) {}
-	
 	KeyBase::~KeyBase() {}
-	
-	bool KeyBase::operator<(const KeyBase &k) const {
-		return key < k.key || (key == k.key && &(tag.get()) < &(k.tag.get()));
-	}
-	
-	bool KeyBase::operator==(const KeyBase &k) const {
-		return key == k.key && &(tag.get()) == &(k.tag.get());
-	}
-	
-	bool KeyBase::operator!=(const KeyBase &k) const {
-		return key != k.key || &(tag.get()) != &(k.tag.get());
-	}
-}
-
-// Copy Constructor
-DynamicHMap::DynamicHMap(const DynamicHMap& other)
-: map_(other.map_) {}
-
-// Move Constructor
-DynamicHMap::DynamicHMap(DynamicHMap&& other)
-: map_(std::move(other.map_)) {}
-
-// Copy Assignment Operator
-DynamicHMap& DynamicHMap::operator=(const DynamicHMap& other) {
-	map_ = other.map_;
-	return *this;
-}
-
-// Move Assignment Operator
-DynamicHMap& DynamicHMap::operator=(DynamicHMap&& other) {
-	map_ = std::move(other.map_);
-	return *this;
 }
 
 DynamicHMap::iterator DynamicHMap::begin() {

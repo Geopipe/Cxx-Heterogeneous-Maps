@@ -58,13 +58,28 @@ namespace detail {
 		std::string key;
 		std::reference_wrapper<const KeyTagBase> tag;
 		
-		KeyBase(const std::string &ki, const KeyTagBase &ti);
-		KeyBase(const KeyBase &k);
+		KeyBase(const std::string &ki, const KeyTagBase &ti)
+		    : key(ki), tag(std::cref(ti)) {}
+		KeyBase(const KeyBase&) = default;
+		KeyBase(KeyBase&&) = default;
+		KeyBase& operator= (const KeyBase&) = default;
+		KeyBase& operator= (KeyBase&&) = default;
 		virtual ~KeyBase();
 		
-		bool operator<(const KeyBase &k) const;
-		bool operator==(const KeyBase &k) const;
-		bool operator!=(const KeyBase &k) const;
+		bool operator<(const KeyBase &k) const {
+			return key < k.key ||
+		           (key == k.key && &(tag.get()) < &(k.tag.get()));
+		}
+	
+		bool operator==(const KeyBase &k) const {
+			return key == k.key &&
+			       &(tag.get()) == &(k.tag.get());
+		}
+	
+		bool operator!=(const KeyBase &k) const {
+			return key != k.key || &(tag.get()) != &(k.tag.get());
+		}
+
 	};
 	
 	template<typename V>
@@ -75,13 +90,25 @@ namespace detail {
 		Key(const Key<V> &k)
 		: KeyBase(k) {}
 		
+		// Build sortable versions of DynamicHMap map key-value pairs
+		// that can be move constructed into the DynamicHMap map,
+		// deferring evaluation of the key and value arguments to
+		// their construction in std::pair storage.
 		template<class A>
-		std::pair<std::reference_wrapper<const Key<V> >, V>
+		std::pair<KeyBase, std::any>
 		operator,(A&& a) const {
-			return std::make_pair(std::cref(*this), std::forward<A>(a));
+			return std::pair<KeyBase, std::any>(std::piecewise_construct,
+			                                    std::forward_as_tuple(std::cref(*((KeyBase *)this))),
+			                                    std::forward_as_tuple(std::any{std::in_place_type<V>,
+			                                                                   std::forward<A>(a)}));
 		}
 	};
 }
+
+
+// Dynamic HMap class
+// As suggested by C++ Core Guidelines, Rule C.20 ("If you can avoid defining
+// default operations, do so"), this class uses the Rule of Zero
 
 class DynamicHMap {
 	std::map<detail::KeyBase, std::any> map_;
@@ -113,11 +140,28 @@ private:
 		}
 	};
 	
+	// loadHMap implementation function
+	template <size_t N, std::size_t... I>
+	constexpr void loadHMapImpl(std::array<std::pair<detail::KeyBase, std::any>, N>&& a,
+	                            std::index_sequence<I...>) {
+		(static_cast<void>(map_.emplace_hint(map_.cend(), std::move(a[I]))),
+		 ...);
+}
+	
+	// Move sorted key-value pairs into array in key order (linear time)
+	template <size_t N, typename Indices = std::make_index_sequence<N> >
+	constexpr void loadHMap(std::array<std::pair<detail::KeyBase, std::any>, N>&& a) {
+		loadHMapImpl(std::move(a), Indices{});
+	}
+	
+	// Extract a single key-value pair from the map, returning a type tag-node handle pair
 	template <typename V>
 	auto extractOne(const detail::Key<V>& k) -> decltype(std::make_pair(k, std::move(map_.extract(k)))) {
 		return std::make_pair(k, std::move(map_.extract(k)));
 	}
 	
+	// Extract a single key-value pair from the map, returning an
+	// optional that contains the value
 	template <typename V>
 	boost::optional<V> optCheckOutOne(const detail::Key<V>& k) {
 		boost::optional<V> retval;
@@ -128,6 +172,7 @@ private:
 		return retval;
 	}
 	
+	// Insert values from compatible node handles into the map
 	template <typename... DataTypes, typename... Args, size_t... Is>
 	void insertHelper(std::tuple<DataTypes...> dataTup,
 	                  std::index_sequence<Is...>, Args&&... args) {
@@ -136,31 +181,31 @@ private:
 		 ...);
 	}
 	
-	// Insert values from a compatible node handle into the map
+	// Insert a value from a compatible node handle into the map
 	template <typename V, typename W, typename X>
 	void insertOne(const detail::Key<V>& k, const detail::Key<W>& kPrime, X&& node_handle) {
-		if constexpr (std::is_convertible_v<W, V>) {
-			if (node_handle) {
-				if constexpr (std::is_same<decltype(map_.get_allocator()),
-				              decltype(node_handle.get_allocator())>::value) {
-						if (map_.get_allocator() == node_handle.get_allocator()) {
-							if (k == kPrime) {
-								map_.insert(std::move(node_handle));
-							} else {
-								map_.try_emplace(k, std::move(node_handle.mapped()));
-							}
-						} else {
-							// Make sure we copy the value
-							map_.try_emplace(k, node_handle.mapped());
-						}
+		static_assert(std::is_convertible_v<W, V>);
+		if (node_handle) {
+			if constexpr (std::is_same<decltype(map_.get_allocator()),
+			              decltype(node_handle.get_allocator())>::value) {
+				if (map_.get_allocator() == node_handle.get_allocator()) {
+					if (k == kPrime) {
+						map_.insert(std::move(node_handle));
+					} else {
+						map_.try_emplace(k, std::move(node_handle.mapped()));
+					}
 				} else {
-				    // Make sure we copy the value
+					// Make sure we copy the value
 					map_.try_emplace(k, node_handle.mapped());
 				}
+			} else {
+				// Make sure we copy the value
+				map_.try_emplace(k, node_handle.mapped());
 			}
 		}
 	}
 	
+	// Copy a value from from the map, returning a boost<const V&>
 	template <typename V>
 	boost::optional<const V&> optCopyOutOne(const detail::Key<V>& k) const {
 		boost::optional<const V&> retval;
@@ -170,6 +215,7 @@ private:
 		return retval;
 	}
 	
+	// Copy a value from from the map, returning a boost<V&>
 	template <typename V>
 	boost::optional<V&> optCopyOutOne(const detail::Key<V>& k) {
 		boost::optional<V&> retval;
@@ -179,6 +225,8 @@ private:
 		return retval;
 	}
 	
+	// Insert values from boost::optional objects into the map as
+	// directed by the corresponding keys
 	template <typename... DataTypes, typename... Args, size_t... Is>
 	void optCheckInHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
 		(static_cast<void>(optCheckInOne(std::move(std::get<Is>(dataTup)),
@@ -186,6 +234,8 @@ private:
 		 ...);
 	}
 	
+	// Move a value from a boost::optional object into the map as
+	// directed by the corresponding key
 	template <typename V>
 	void optCheckInOne(boost::optional<V>&& arg, const detail::Key<V>& k) {
 		if (boost::none != arg) {
@@ -198,6 +248,8 @@ private:
 		}
 	}
 	
+	// Copy values from boost::optional<V&> objects into the map as
+	// directed by the corresponding keys
 	template <typename... DataTypes, typename... Args, size_t... Is>
 	void optCopyInHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
 		(static_cast<void>(optCopyInOne(std::move(std::get<Is>(dataTup)),
@@ -205,6 +257,8 @@ private:
 		 ...);
 	}
 	
+	// Copy a value from a boost::optional<V&> object into the map as
+	// directed by the corresponding key
 	template <typename V>
 	void optCopyInOne(boost::optional<V&>&& arg, const detail::Key<V>& k) {
 		if (boost::none != arg) {
@@ -218,12 +272,6 @@ private:
 	}
 
   public:
-	
-	DynamicHMap(const DynamicHMap& other);  // Copy Constructor
-	DynamicHMap(DynamicHMap&& other);       // Move Constructor
-	
-	DynamicHMap& operator=(const DynamicHMap& other);  // Copy Assignment Operator
-	DynamicHMap& operator=(DynamicHMap&& other);       // Move Assignment Operator
 	
 	template<typename ...Args>
 	DynamicHMap(Args&& ...args)
@@ -254,11 +302,13 @@ private:
 		return std::any_cast<const V&>(map_.at(k));
 	}
 	
+	// Extract key-value pairs from map for insert into another map
 	template <typename... Args>
 	auto extract(Args&&... args) {
 		return std::make_tuple(extractOne(args)...);
 	}
 	
+	// Insert key-value pairs into map from extract from another map
 	template<typename ...Types, typename ...Args>
 	void insert(std::tuple<Types...> &&tup,
 	            Args&& ...args) {
@@ -267,17 +317,23 @@ private:
 		             std::forward<Args>(args)...);
 	}
 	
+    // Extract key-value pairs from the map, returning optionals
+	// that contain the values
 	template <typename... Args>
 	auto optCheckOut(Args&&... args) {
 		return std::make_tuple(optCheckOutOne(args)...);
 	}
 	
+	// Copy values from the map, returning optionals
+	// that refer to the values.
 	template <typename... Args>
 	auto optCopyOut(Args&&... args)
 	{
 		return std::make_tuple(optCopyOutOne(args)...);
 	}
 	
+	// Insert values from boost::optional objects into the map as
+	// directed by the corresponding keys
 	template<typename ...Types, typename ...Args>
 	void optCheckIn(std::tuple<Types...> &&tup,
 	                Args&& ...args) {
@@ -286,6 +342,8 @@ private:
 		                 std::forward<Args>(args)...);
 	}
 	
+	// Copy values from boost::optional<V&> objects into the map as
+	// directed by the corresponding keys
 	template<typename ...Types, typename ...Args>
 	void optCopyIn(std::tuple<Types...> &&tup,
 	               Args&& ...args) {
@@ -336,6 +394,7 @@ private:
 			return 1;
 		}
 	}
+
 };
 
 template<typename V>
@@ -355,11 +414,15 @@ detail::Key<std::unique_ptr<V> > dUK(const std::string& k) {
 	
 template<typename ...Vs>
 DynamicHMap make_dynamic_hmap(Vs&& ...vs) {
+	std::array<std::pair<detail::KeyBase, std::any>, sizeof...(Vs)> argArray
+		{ vs... };
+	std::sort(argArray.begin(), argArray.end(),
+			  [] (const std::pair<detail::KeyBase, std::any>& left,
+				  const std::pair<detail::KeyBase, std::any>& right)
+				  {
+					  return left.first < right.first;
+				  });
 	DynamicHMap hmap;
-	(static_cast<void>([&hmap](auto commaPair) {
-	                       hmap.map_.try_emplace(commaPair.first,
-	                                             std::move(commaPair.second));
-	                       }(vs)),
-	    ...);
+	hmap.loadHMap(std::move(argArray));
 	return hmap;
 };
