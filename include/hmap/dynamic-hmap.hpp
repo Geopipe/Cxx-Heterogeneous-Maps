@@ -225,6 +225,26 @@ private:
 		return retval;
 	}
 	
+	// Copy a value from from the map, returning a const V*
+	template <typename V>
+	const V* ptrCopyOutOne(const detail::Key<V>& k) const {
+		const V* retval = nullptr;
+		if (auto it = map_.find(k); map_.cend() != it) {
+			retval = std::any_cast<const V*>(map_.at(k));
+		}
+		return retval;
+	}
+	
+	// Copy a value from from the map, returning a V*
+	template <typename V>
+	V* ptrCopyOutOne(const detail::Key<V>& k) {
+		V* retval = nullptr;
+		if (auto it = map_.find(k); map_.end() != it) {
+			retval = std::any_cast<V*>(map_.at(k));
+		}
+		return retval;
+	}
+	
 	// Insert values from boost::optional objects into the map as
 	// directed by the corresponding keys
 	template <typename... DataTypes, typename... Args, size_t... Is>
@@ -322,6 +342,14 @@ private:
 	template <typename... Args>
 	auto optCheckOut(Args&&... args) {
 		return std::make_tuple(optCheckOutOne(args)...);
+	}
+	
+	// Copy values from the map, returning pointers
+	// that refer to the values.
+	template <typename... Args>
+	auto ptrCopyOut(Args&&... args)
+	{
+		return std::make_tuple(ptrCopyOutOne(args)...);
 	}
 	
 	// Copy values from the map, returning optionals
