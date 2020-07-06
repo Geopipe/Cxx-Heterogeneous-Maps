@@ -322,6 +322,24 @@ private:
 		return std::any_cast<const V&>(map_.at(k));
 	}
 	
+    template<typename V, typename ...Args>
+	auto try_emplace(const detail::Key<V>& k, Args&& ...args) {
+		auto [iter, inserted] =
+				map_.try_emplace(k, std::any{std::in_place_type<V>,
+							std::forward<Args>(args)...});
+		return std::make_pair(boost::make_transform_iterator<AnyCaster<V> >(iter),
+							  inserted);
+	}
+
+    template<typename V, typename ...Args>
+	auto insert_or_assign(const detail::Key<V>& k, Args&& ...args) {
+		auto [iter, inserted] =
+				map_.insert_or_assign(k, std::any{std::in_place_type<V>,
+							std::forward<Args>(args)...});
+		return std::make_pair(boost::make_transform_iterator<AnyCaster<V> >(iter),
+							  inserted);
+	}
+
 	// Extract key-value pairs from map for insert into another map
 	template <typename... Args>
 	auto extract(Args&&... args) {
@@ -397,25 +415,22 @@ private:
 	size_t size() const;
 	bool empty() const;
 	
-	
 	template<typename V>
 	auto find(const detail::Key<V>& k) {
 		iterator found = map_.find(k);
-		iterator theEnd = end();
-		return boost::make_transform_iterator<AnyCaster<V> >((found == theEnd) ? theEnd : found);
+		return boost::make_transform_iterator<AnyCaster<V> >(found);
 	}
 	
 	template<typename V>
 	auto find(const detail::Key<V>& k) const {
 		const_iterator found = map_.find(k);
-		const_iterator theEnd = cend();
-		return boost::make_transform_iterator<ConstAnyCaster<V> >((found == theEnd) ? theEnd : found);
+		return boost::make_transform_iterator<ConstAnyCaster<V> >(found);
 	}
 	
 	template<typename V>
 	size_t erase(const detail::Key<V>& k) {
 		auto found = map_.find(k);
-		if(found == map_.end()) {
+		if(map_.end() == found) {
 			return 0;
 		} else {
 			map_.erase(found);
