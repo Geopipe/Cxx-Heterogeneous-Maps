@@ -2,7 +2,6 @@
 #include <hmap/dynamic-hmap.hpp>
 
 #include <iostream>
-#include <string_view>
 
 using namespace std::string_literals;
 
@@ -42,7 +41,7 @@ int main(int argc, const char* argv[]) {
 			const std::string& bar_;
 		public:
 			explicit Foo(const std::string& bar) : bar_(bar) {}
-			const std::string_view str() const { return bar_; }
+			const std::string& str() const { return bar_; }
 		};
 		auto myMap = make_dynamic_hmap((dK<Foo>("baz"), Foo("Listen"s)),
 		                               (dK<Foo>("bobndoug"), Foo("hosers"s)),
@@ -115,14 +114,11 @@ int main(int argc, const char* argv[]) {
 		// Unify the boost optional and literals to a common class
 		// for use by operator <<.  We could use std::string_view,
 		// but the best option is to use C++ string literals
-		// (added by C++14) so both map and value_or will return
-		// const std::string&.
-		auto make_view = [](const std::shared_ptr<std::string>& mem)
-		    { return *mem; };
+		// (added by C++14)
 
 		auto &[optCusp, optBaz] = tup;
-		std::cout << optCusp.map(make_view).value_or("\"cusp\" is not in map"s) << std::endl;
-		std::cout << optBaz.map(make_view).value_or("\"baz\" is not in map"s) << std::endl;
+		std::cout << ((boost::none != optCusp) ? **optCusp : "\"cusp\" is not in map"s) << std::endl;
+		std::cout << ((boost::none != optBaz) ? **optBaz : "\"baz\" is not in map"s) << std::endl;
 	}
 
 	return 0;
