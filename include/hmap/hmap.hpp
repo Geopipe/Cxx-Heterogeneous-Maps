@@ -74,13 +74,15 @@ namespace detail {
 		constexpr static const bool value = true;
 	};
 	
-	template<typename Value, char ...Cs> struct ValueType;
+	namespace detail {
+		template<typename Value, char ...Cs> struct ValueType;
+	};
 	
 	template<typename _Value, char ...Cs> struct KeyType : CharList<Cs...> {
 		using Typeless = CharList<Cs...>;
 		using Typeless::c_str;
 		using Value = _Value;
-		using ValueType = ValueType<Value, Cs...>;
+		using ValueType = detail::ValueType<Value, Cs...>;
 		
 		template<typename Arg>
 		constexpr ValueType operator,(Arg &&a) {
@@ -99,12 +101,14 @@ namespace detail {
 		constexpr static const bool value = true;
 	};
 	
-	template<typename Value, char ...Cs> struct ValueType : KeyType<Value, Cs...> {
-		using KeyType = KeyType<Value, Cs...>;
-		using KeyType::c_str;
-		Value v;
-		constexpr ValueType(Value vi) : v(vi) {}
-	};
+	namespace detail {
+		template<typename Value, char ...Cs> struct ValueType : KeyType<Value, Cs...> {
+			using ValueKeyType = KeyType<Value, Cs...>;
+			using ValueKeyType::c_str;
+			Value v;
+			constexpr ValueType(Value vi) : v(vi) {}
+		};
+	}
 	
 	template<typename Left, typename Right, bool b>
 	struct TakeLesser {
