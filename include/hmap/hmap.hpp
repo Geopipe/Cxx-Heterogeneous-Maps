@@ -19,6 +19,7 @@
  *
  ************************************************************************************/
 
+#include <array>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
@@ -50,6 +51,7 @@ constexpr auto tuple_slice(Cont&& t)
 //////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
+	using std::array;
 	using std::integral_constant;
 	using std::make_tuple;
 	using std::size_t;
@@ -58,10 +60,19 @@ namespace detail {
 	//////////////////////////////////////////////////////////////////////////////
 	// Our basic building blocks for key/value pairs
 	template<char ...Cs> struct CharList {
-		constexpr static const char data[sizeof...(Cs)] = {Cs ...};
+		constexpr static const size_t storage_size = sizeof...(Cs);
+		constexpr static const size_t c_str_length = storage_size - 1;
+
+		constexpr static const char data[storage_size] = {Cs ...};
+		constexpr static const bool is_c_str = data[c_str_length] == '\0';
+
+		constexpr static const size_t length() {
+			static_assert(is_c_str, "C strings must be null-terminated");
+			return c_str_length;	
+		}
 		
-		constexpr static decltype(data)& c_str() {
-			static_assert(data[sizeof...(Cs) - 1] == '\0', "C strings must be null-terminated");
+		constexpr static const decltype(data)& c_str() {
+			static_assert(is_c_str, "C strings must be null-terminated");
 			return data;
 		}
 	};
@@ -83,6 +94,7 @@ namespace detail {
 	template<typename _Value, char ...Cs> struct KeyType : CharList<Cs...> {
 		using Typeless = CharList<Cs...>;
 		using Typeless::c_str;
+		using Typeless::length;
 		using Value = _Value;
 		using ValueType = detail::ValueType<Value, Cs...>;
 		
@@ -107,6 +119,7 @@ namespace detail {
 		template<typename Value, char ...Cs> struct ValueType : KeyType<Value, Cs...> {
 			using ValueKeyType = KeyType<Value, Cs...>;
 			using ValueKeyType::c_str;
+			using ValueKeyType::length;
 			Value v;
 			constexpr ValueType(Value vi) : v(vi) {}
 		};
@@ -124,7 +137,7 @@ namespace detail {
 	
 	template<typename Left, typename Right> struct KeyLess {
 		
-		constexpr static const bool value = std::string_view(Left::c_str()) < std::string_view(Right::c_str());
+		constexpr static const bool value = std::string_view(Left::c_str(), Left::length()) < std::string_view(Right::c_str(), Right::length());
 		
 		constexpr static auto apply(Left l, Right r) {
 			return TakeLesser<Left, Right, value>::apply(l, r);
