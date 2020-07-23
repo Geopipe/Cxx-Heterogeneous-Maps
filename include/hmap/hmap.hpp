@@ -329,7 +329,7 @@ namespace detail {
 	
 	//////////////////////////////////////////////////////////////////////////////
 	// Convert a sequence of types into a balanced binary tree of types
-	template<typename Left, typename Right, size_t TargetLeft>
+	template<typename Left, typename Right, typename TargetLeft>
 	struct SplitJointIf;
 	
 	template<typename _Left, typename _Right, size_t TargetLeft>
@@ -342,7 +342,7 @@ namespace detail {
 	
 	template<typename ...Ls, typename H, typename ...Rs, size_t TargetLeft>
 	class Split<tuple<Ls...>, tuple<H, Rs...>, TargetLeft> {
-		using IfThunk = SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, TargetLeft>;
+		using IfThunk = SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, std::integral_constant<std::size_t, TargetLeft> >;
 	public:
 		using Left = typename IfThunk::Left;
 		using Here = typename IfThunk::Here;
@@ -354,10 +354,11 @@ namespace detail {
 		}
 	};
 	
-	template<typename Left, typename Right, size_t TargetLeft>
+	// Note: integral constant required per gcc missing implementation of http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/p0263r1.html#1315
+	template<typename Left, typename Right, typename TargetLeft>
 	struct SplitJointIf {};
 	template<typename ...Ls, typename H, typename ...Rs>
-	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, sizeof...(Ls)> {
+	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, std::integral_constant<std::size_t, sizeof...(Ls)> > {
 		using Left = tuple<Ls...>;
 		using Here = H;
 		using Right = tuple<Rs...>;
@@ -371,7 +372,7 @@ namespace detail {
 	};
 	
 	template<typename ...Ls, typename H, typename ...Rs, size_t TargetLeft>
-	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, TargetLeft> {
+	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, std::integral_constant<std::size_t, TargetLeft> > {
 	private:
 		static_assert(sizeof...(Ls) < TargetLeft, "Missed the loop exit condition");
 		using SplitThunk = Split<tuple<Ls..., H>, tuple<Rs...>, TargetLeft>;
@@ -645,7 +646,7 @@ HMap<typename Values::KeyType...> make_hmap(Values&& ...values) {
 	return HMap<typename Values::KeyType...>(std::forward<Values>(values)...);
 }
 
-#define TK(stringliteral,T) keyType<T>([](){ return stringliteral; })
-#define IK(stringliteral) inferredKeyType([](){ return stringliteral; })
+#define TK(stringliteral,T) keyType<T>([]() constexpr { return stringliteral; })
+#define IK(stringliteral) inferredKeyType([]() constexpr { return stringliteral; })
 //////////////////////////////////////////////////////////////////////////////
 
