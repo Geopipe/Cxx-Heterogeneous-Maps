@@ -46,7 +46,7 @@ class KeyTag : public detail::KeyTagBase {
 	KeyTag() {}
 	KeyTag(const KeyTag&) = delete;
 	KeyTag(KeyTag&&) = delete;
-public:
+  public:
 	static const KeyTag<V>& tag() {
 		static KeyTag<V> theTag_ = KeyTag<V>();
 		return theTag_;
@@ -90,10 +90,9 @@ namespace detail {
 		Key(const Key<V> &k)
 		: KeyBase(k) {}
 		
-		// Build sortable versions of DynamicHMap map key-value pairs
-		// that can be move constructed into the DynamicHMap map,
-		// deferring evaluation of the key and value arguments to
-		// their construction in std::pair storage.
+		// Build versions of DynamicHMap map key-value pairs
+		// (note that KeyBase is left non-const to allow use of std::sort...
+		// in the actual key-value pair, KeyBase will be const)
 		template<class A>
 		std::pair<KeyBase, std::any>
 		operator,(A&& a) const {
@@ -113,7 +112,7 @@ namespace detail {
 class DynamicHMap {
 	std::map<detail::KeyBase, std::any> map_;
 	
-public:
+  public:
 	using value_type = decltype(map_)::value_type;
 	using iterator = decltype(map_)::iterator;
 	using const_iterator = decltype(map_)::const_iterator;
@@ -121,10 +120,7 @@ public:
 	template<typename V> using specific_value_type = std::pair<detail::KeyBase, V&>;
 	template<typename V> using const_specific_value_type = std::pair<detail::KeyBase, const V&>;
 
-	template<typename ...Vs>
-	friend DynamicHMap make_dynamic_hmap(Vs&& ...vs);
-
-private:
+  private:
 	
 	template<typename V>
 	struct AnyCaster {
@@ -141,6 +137,8 @@ private:
 	};
 	
 	// loadHMap implementation function
+	// By inserting pairs into map storage in ascending key
+	// order using a hint, each insertion is done in constant time
 	template <size_t N, std::size_t... I>
 	constexpr void loadHMapImpl(std::array<std::pair<detail::KeyBase, std::any>, N>&& a,
 	                            std::index_sequence<I...>) {
@@ -148,7 +146,7 @@ private:
 		 ...);
 }
 	
-	// Move sorted key-value pairs into array in key order (linear time)
+	// Move N sorted key-value pairs into array in key order in O(N) time
 	template <size_t N, typename Indices = std::make_index_sequence<N> >
 	constexpr void loadHMap(std::array<std::pair<detail::KeyBase, std::any>, N>&& a) {
 		loadHMapImpl(std::move(a), Indices{});
@@ -186,20 +184,25 @@ private:
 	void insertOne(const detail::Key<V>& k, const detail::Key<W>& kPrime, X&& node_handle) {
 		static_assert(std::is_convertible_v<W, V>);
 		if (node_handle) {
+			// If allocators are type compatible, use move construction
+			// TODO: Loosen this a bit for polymorphic allocators
 			if constexpr (std::is_same<decltype(map_.get_allocator()),
 			              decltype(node_handle.get_allocator())>::value) {
 				if (map_.get_allocator() == node_handle.get_allocator()) {
+					// If we can use the same key, do a node handle insert
+					// If we cannot, use try_emplace with move construction of
+					// the value portion of the key-value pair
 					if (k == kPrime) {
 						map_.insert(std::move(node_handle));
 					} else {
 						map_.try_emplace(k, std::move(node_handle.mapped()));
 					}
 				} else {
-					// Make sure we copy the value
+					// Make sure we copy the value instead of moving it
 					map_.try_emplace(k, node_handle.mapped());
 				}
 			} else {
-				// Make sure we copy the value
+				// Make sure we copy the value instead of moving it
 				map_.try_emplace(k, node_handle.mapped());
 			}
 		}
@@ -292,11 +295,27 @@ private:
 	}
 
   public:
-	
+
 	template<typename ...Args>
 	DynamicHMap(Args&& ...args)
 	: map_(std::forward<Args>(args) ...) {}
 	
+	
+	// Construct a DynamicHMap by using Key<V>, std::any pairs,
+	// casting Key<V> to KeyBase to perform type erasure.
+	template<typename ...Vs>
+	DynamicHMap(std::in_place_t, Vs&& ...vs) {
+		std::array<std::pair<detail::KeyBase, std::any>, sizeof...(Vs)> argArray
+		    { vs... };
+		std::sort(argArray.begin(), argArray.end(),
+		              [] (const std::pair<detail::KeyBase, std::any>& left,
+		                  const std::pair<detail::KeyBase, std::any>& right)
+		              {
+		                  return left.first < right.first;
+		              });
+		loadHMap(std::move(argArray));
+	}
+
 	template<typename V>
 	V& operator[](const detail::Key<V>& k) {
 		std::any& vHolder = map_[k];
@@ -310,9 +329,16 @@ private:
 	// Doesn't currently support various "fancy" operations
 	// If you want it, add it.
 	
+	// Find a matching key value pair and return a reference to the value
+
+	// Since map_.at will throw if there is no matching key and the
+	// test compares the whole key... the std::string and the underlying
+	// KeyBase singleton to which it refers... this means that the
+	// std::any& it returns can be safely cast to V& (because the std::any
+	// must contain a V)
+
 	template<typename V>
 	V& at(const detail::Key<V>& k) {
-		// This will throw if it's not an appropriate type
 		return std::any_cast<V&>(map_.at(k));
 	}
 	
@@ -400,6 +426,9 @@ private:
 	
     iterator begin();
 	iterator end();
+
+	// Add a version of end() that can be compared against the iterator
+	// returned by find for a non-const DynamicHMap
 	template<typename V>
 	auto end() {
 		return boost::make_transform_iterator<AnyCaster<V> >(end());
@@ -407,6 +436,9 @@ private:
 	
 	const_iterator cbegin() const;
 	const_iterator cend() const;
+
+	// Add a version of cend() that can be compared against the iterator
+	// returned by find for a const DynamicHMap
 	template<typename V>
 	auto cend() const {
 		return boost::make_transform_iterator<ConstAnyCaster<V> >(cend());
@@ -414,6 +446,7 @@ private:
 	
 	size_t size() const;
 	bool empty() const;
+	
 	
 	template<typename V>
 	auto find(const detail::Key<V>& k) {
@@ -450,22 +483,7 @@ detail::Key<std::shared_ptr<V> > dSK(const std::string& k) {
 	return detail::Key<std::shared_ptr<V> >(k);
 }
 	
-template<typename V>
-detail::Key<std::unique_ptr<V> > dUK(const std::string& k) {
-	return detail::Key<std::unique_ptr<V> >(k);
-}
-	
 template<typename ...Vs>
 DynamicHMap make_dynamic_hmap(Vs&& ...vs) {
-	std::array<std::pair<detail::KeyBase, std::any>, sizeof...(Vs)> argArray
-		{ vs... };
-	std::sort(argArray.begin(), argArray.end(),
-			  [] (const std::pair<detail::KeyBase, std::any>& left,
-				  const std::pair<detail::KeyBase, std::any>& right)
-				  {
-					  return left.first < right.first;
-				  });
-	DynamicHMap hmap;
-	hmap.loadHMap(std::move(argArray));
-	return hmap;
+	return DynamicHMap(std::in_place, std::forward<Vs>(vs)...);
 };
