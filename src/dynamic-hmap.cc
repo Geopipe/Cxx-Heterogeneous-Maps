@@ -20,36 +20,12 @@
 
 #include <hmap/dynamic-hmap.hpp>
 
-
+// The vtables for these classes will be generated here
 namespace detail {
 	KeyTagBase::~KeyTagBase() {}
 	
-	KeyBase::KeyBase(const std::string &ki, const KeyTagBase& ti)
-	: key(ki), tag(ti) {}
-	
-	KeyBase::KeyBase(const KeyBase &k)
-	: key(k.key), tag(k.tag) {}
-	
 	KeyBase::~KeyBase() {}
-	
-	bool KeyBase::operator<(const KeyBase &k) const {
-		return key < k.key;
-	}
-	
-	bool KeyBase::operator==(const KeyBase &k) const {
-		return key == k.key;
-	}
-	
-	bool KeyBase::operator!=(const KeyBase &k) const {
-		return key != k.key;
-	}
 }
-
-DynamicHMap::DynamicHMap(const DynamicHMap& other)
-: map_(other.map_) {}
-
-DynamicHMap::DynamicHMap(DynamicHMap&& other)
-: map_(std::move(other.map_)) {}
 
 DynamicHMap::iterator DynamicHMap::begin() {
 	return map_.begin();
