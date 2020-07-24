@@ -70,7 +70,7 @@ int main(int argc, const char* argv[]) {
 		assert(!inserted3); // Assert that "All the hosers" went nowhere, eh
 
 		auto [iter4, inserted4] =
-		    myMap.try_emplace(dK<Foo>("crack"), "got to love"s);
+		    myMap.try_emplace(dK<Foo>("chair"), "got to love"s);
 		assert(inserted4); // Assert that "got to love" was inserted
 
 		std::cout << iter3->second.str() << ' ';
