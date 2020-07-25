@@ -19,13 +19,10 @@
  *
  ************************************************************************************/
 
-#include "hmap.hpp"
-#include "dynamic-hmap.hpp"
-
-using detail::Key;
-using detail::KeyType;
+#include <hmap/hmap.hpp>
+#include <hmap/dynamic-hmap.hpp>
 
 template<typename Value, char ...Cs>
-Key<Value> staticToDynamicKey(KeyType<Value, Cs...> key) {
-	return dK<Value>(key.c_str());
+detail::Key<Value> staticToDynamicKey(detail::KeyType<Value, Cs...>) {
+	return dK<Value>(detail::KeyType<Value, Cs...>::c_str());
 }
