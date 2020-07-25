@@ -50,7 +50,6 @@ constexpr auto tuple_slice(Cont&& t)
 //////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
-	using std::array;
 	using std::integral_constant;
 	using std::make_tuple;
 	using std::size_t;
