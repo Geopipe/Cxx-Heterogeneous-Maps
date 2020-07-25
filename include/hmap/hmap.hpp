@@ -50,17 +50,27 @@ constexpr auto tuple_slice(Cont&& t)
 //////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
-	using std::tuple;
+	using std::integral_constant;
 	using std::make_tuple;
-	
+	using std::size_t;
+	using std::tuple;
 	
 	//////////////////////////////////////////////////////////////////////////////
 	// Our basic building blocks for key/value pairs
 	template<char ...Cs> struct CharList {
-		constexpr static const char data[sizeof...(Cs)] = {Cs ...};
+		constexpr static const size_t storage_size = sizeof...(Cs);
+		constexpr static const size_t c_str_length = storage_size - 1;
+
+		constexpr static const char data[storage_size] = {Cs ...};
+		constexpr static const bool is_c_str = data[c_str_length] == '\0';
+
+		constexpr static const size_t length() {
+			static_assert(is_c_str, "C strings must be null-terminated");
+			return c_str_length;	
+		}
 		
-		constexpr static decltype(data)& c_str() {
-			static_assert(data[sizeof...(Cs) - 1 == '\0'], "C strings must be null-terminated");
+		constexpr static const decltype(data)& c_str() {
+			static_assert(is_c_str, "C strings must be null-terminated");
 			return data;
 		}
 	};
@@ -75,13 +85,16 @@ namespace detail {
 		constexpr static const bool value = true;
 	};
 	
-	template<typename Value, char ...Cs> struct ValueType;
+	namespace detail {
+		template<typename Value, char ...Cs> struct ValueType;
+	};
 	
 	template<typename _Value, char ...Cs> struct KeyType : CharList<Cs...> {
 		using Typeless = CharList<Cs...>;
 		using Typeless::c_str;
+		using Typeless::length;
 		using Value = _Value;
-		using ValueType = ValueType<Value, Cs...>;
+		using ValueType = detail::ValueType<Value, Cs...>;
 		
 		template<typename Arg>
 		constexpr ValueType operator,(Arg &&a) {
@@ -100,12 +113,15 @@ namespace detail {
 		constexpr static const bool value = true;
 	};
 	
-	template<typename Value, char ...Cs> struct ValueType : KeyType<Value, Cs...> {
-		using KeyType = KeyType<Value, Cs...>;
-		using KeyType::c_str;
-		Value v;
-		constexpr ValueType(Value vi) : v(vi) {}
-	};
+	namespace detail {
+		template<typename Value, char ...Cs> struct ValueType : KeyType<Value, Cs...> {
+			using ValueKeyType = KeyType<Value, Cs...>;
+			using ValueKeyType::c_str;
+			using ValueKeyType::length;
+			Value v;
+			constexpr ValueType(Value vi) : v(vi) {}
+		};
+	}
 	
 	template<typename Left, typename Right, bool b>
 	struct TakeLesser {
@@ -119,21 +135,21 @@ namespace detail {
 	
 	template<typename Left, typename Right> struct KeyLess {
 		
-		constexpr static const bool value = std::string_view(Left::c_str()) < std::string_view(Right::c_str());
+		constexpr static const bool value = std::string_view(Left::c_str(), Left::length()) < std::string_view(Right::c_str(), Right::length());
 		
 		constexpr static auto apply(Left l, Right r) {
 			return TakeLesser<Left, Right, value>::apply(l, r);
 		}
 	};
 	
-	template<typename Value, typename StringHolder, std::size_t ...I>
-	auto keyTypeImpl(StringHolder holder, std::index_sequence<I...>) {
+	template<typename Value, typename StringHolder, size_t ...I>
+	constexpr auto keyTypeImpl(StringHolder holder, std::index_sequence<I...>) {
 		constexpr std::string_view text = holder();
 		return KeyType<Value, text[I] ...>();
 	}
 	
-	template<typename StringHolder, std::size_t ...I>
-	auto inferredKeyTypeImpl(StringHolder holder, std::index_sequence<I...>) {
+	template<typename StringHolder, size_t ...I>
+	constexpr auto inferredKeyTypeImpl(StringHolder holder, std::index_sequence<I...>) {
 		constexpr std::string_view text = holder();
 		return CharList<text[I] ...>();
 	}
@@ -299,37 +315,37 @@ namespace detail {
 		V v;
 		L l;
 		R r;
-		Node(V vi, L li, R ri) : v(vi), l(li), r(ri) {}
+		constexpr Node(V vi, L li, R ri) : v(vi), l(li), r(ri) {}
 	};
 	
 	template<class V, class R>
 	struct Node<V, void, R> {
 		V v;
 		R r;
-		Node(V vi, R ri) : v(vi), r(ri) {}
+		constexpr Node(V vi, R ri) : v(vi), r(ri) {}
 	};
 	
 	template<class V, class L>
 	struct Node<V, L, void> {
 		V v;
 		L l;
-		Node(V vi, L li) : v(vi), l(li) {}
+		constexpr Node(V vi, L li) : v(vi), l(li) {}
 	};
 	
 	template<class V>
 	struct Node<V, void, void> {
 		V v;
-		Node(V vi) : v(vi) {}
+		constexpr Node(V vi) : v(vi) {}
 	};
 	//////////////////////////////////////////////////////////////////////////////
 	
 	
 	//////////////////////////////////////////////////////////////////////////////
 	// Convert a sequence of types into a balanced binary tree of types
-	template<typename Left, typename Right, size_t TargetLeft>
+	template<typename Left, typename Right, typename TargetLeft>
 	struct SplitJointIf;
 	
-	template<typename _Left, typename _Right, size_t TargetLeft>
+	template<typename _Left, typename _Right, typename TargetLeft>
 	class Split {
 	public:
 		using Left = void;
@@ -338,8 +354,8 @@ namespace detail {
 	};
 	
 	template<typename ...Ls, typename H, typename ...Rs, size_t TargetLeft>
-	class Split<tuple<Ls...>, tuple<H, Rs...>, TargetLeft> {
-		using IfThunk = SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, TargetLeft>;
+	class Split<tuple<Ls...>, tuple<H, Rs...>, integral_constant<size_t, TargetLeft> > {
+		using IfThunk = SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, integral_constant<size_t, TargetLeft> >;
 	public:
 		using Left = typename IfThunk::Left;
 		using Here = typename IfThunk::Here;
@@ -351,10 +367,11 @@ namespace detail {
 		}
 	};
 	
-	template<typename Left, typename Right, size_t TargetLeft>
+	// Note: integral constant required per gcc missing implementation of http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/p0263r1.html#1315
+	template<typename Left, typename Right, typename TargetLeft>
 	struct SplitJointIf {};
 	template<typename ...Ls, typename H, typename ...Rs>
-	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, sizeof...(Ls)> {
+	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, integral_constant<size_t, sizeof...(Ls)> > {
 		using Left = tuple<Ls...>;
 		using Here = H;
 		using Right = tuple<Rs...>;
@@ -368,10 +385,10 @@ namespace detail {
 	};
 	
 	template<typename ...Ls, typename H, typename ...Rs, size_t TargetLeft>
-	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, TargetLeft> {
+	struct SplitJointIf<tuple<Ls...>, tuple<H, Rs...>, integral_constant<size_t, TargetLeft> > {
 	private:
 		static_assert(sizeof...(Ls) < TargetLeft, "Missed the loop exit condition");
-		using SplitThunk = Split<tuple<Ls..., H>, tuple<Rs...>, TargetLeft>;
+		using SplitThunk = Split<tuple<Ls..., H>, tuple<Rs...>, integral_constant<size_t, TargetLeft> >;
 	public:
 		using Left = typename SplitThunk::Left;
 		using Here = typename SplitThunk::Here;
@@ -395,7 +412,7 @@ namespace detail {
 	
 	template<template<typename, typename, typename> class Node, typename HeadT, typename ...TailTs>
 	class SortedToTree<Node, tuple<HeadT, TailTs...>> {
-		using SplitThunk = Split<tuple<>, tuple<HeadT, TailTs...>, sizeof...(TailTs) / 2>;
+		using SplitThunk = Split<tuple<>, tuple<HeadT, TailTs...>, integral_constant<size_t, sizeof...(TailTs) / 2> >;
 		using Left = typename SplitThunk::Left;
 		using Here = typename SplitThunk::Here;
 		using Right = typename SplitThunk::Right;
@@ -408,7 +425,8 @@ namespace detail {
 		using type = Node<Here, typename LeftThunk::type, typename RightThunk::type>;
 		
 		constexpr static type apply(const tuple<HeadT, TailTs...>& args) {
-			auto ret = std::apply(SplitThunk::template split<const HeadT&, const TailTs&...>, args);
+			using SplitF = tuple<Left,Here,Right>(&)(const HeadT&, const TailTs&...);
+			auto ret = std::apply(static_cast<SplitF>(SplitThunk::template split<const HeadT&, const TailTs&...>), args);
 			auto& [left, here, right] = ret;
 			return NodeMaker<Node, Here, LeftThunk, RightThunk>::apply(here, left, right);
 		}
@@ -595,13 +613,13 @@ class HMap {
 	Tree tree_;
 public:
 	template<typename ...Values>
-	HMap(Values&& ...values)
+	constexpr HMap(Values&& ...values)
 	: tree_(TreeThunk::apply(MergeThunk::apply(std::forward<Values>(values)...))) {
 		static_assert(NoDuplicateKeys, "HMap would contain duplicate keys");
 	}
 	
 	template<typename KeyType, std::enable_if_t<detail::IsKeyType<KeyType>::value, bool> = false>
-	auto& operator[](const KeyType&){
+	constexpr auto& operator[](const KeyType&){
 		using Thunk = ValueThunk<KeyType>;
 		using ValueType = typename Thunk::type;
 		static_assert(!std::is_same_v<ValueType, void>, "HMap doesn't contain key");
@@ -611,7 +629,7 @@ public:
 	}
 	
 	template<typename KeyType, std::enable_if_t<detail::IsCharList<KeyType>::value, bool> = false>
-	auto& operator[](const KeyType&){
+	constexpr auto& operator[](const KeyType&){
 		using Thunk = ValueThunk<KeyType>;
 		using ValueType = typename Thunk::type;
 		static_assert(!std::is_same_v<ValueType, void>, "HMap doesn't contain key");
@@ -619,7 +637,7 @@ public:
 	}
 	
 	template<typename KeyType, std::enable_if_t<detail::IsKeyType<KeyType>::value, bool> = false>
-	const auto& operator[](const KeyType&) const{
+	constexpr const auto& operator[](const KeyType&) const{
 		using Thunk = ValueThunk<KeyType>;
 		using ValueType = typename Thunk::type;
 		static_assert(!std::is_same_v<ValueType, void>, "HMap doesn't contain key");
@@ -629,7 +647,7 @@ public:
 	}
 	
 	template<typename KeyType, std::enable_if_t<detail::IsCharList<KeyType>::value, bool> = false>
-	const auto& operator[](const KeyType&) const {
+	constexpr const auto& operator[](const KeyType&) const {
 		using Thunk = ValueThunk<KeyType>;
 		using ValueType = typename Thunk::type;
 		static_assert(!std::is_same_v<ValueType, void>, "HMap doesn't contain key");
@@ -638,11 +656,11 @@ public:
 };
 
 template<typename ...Values>
-HMap<typename Values::KeyType...> make_hmap(Values&& ...values) {
+constexpr HMap<typename Values::KeyType...> make_hmap(Values&& ...values) {
 	return HMap<typename Values::KeyType...>(std::forward<Values>(values)...);
 }
 
-#define TK(stringliteral,T) keyType<T>([](){ return stringliteral; })
-#define IK(stringliteral) inferredKeyType([](){ return stringliteral; })
+#define TK(stringliteral,T) keyType<T>([]() constexpr { return stringliteral; })
+#define IK(stringliteral) inferredKeyType([]() constexpr { return stringliteral; })
 //////////////////////////////////////////////////////////////////////////////
 

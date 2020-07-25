@@ -1,11 +1,13 @@
 #include <hmap/hmap.hpp>
 #include <hmap/dynamic-hmap.hpp>
+#include <hmap/key-convert.hpp>
 
 #include <iostream>
 
 using namespace std::string_literals;
 
 int main(int argc, const char* argv[]) {
+	// Verify proper functionality of the static hmap (positive and negative tests)
 	{
 		auto myMap = make_hmap((TK("foo",int), 1), (TK("bar",float), 2.), (TK("baz",std::string), "hello"));
 		
@@ -35,6 +37,7 @@ int main(int argc, const char* argv[]) {
 		/////////////////////////////////////////////////
 		
 	}
+	// Verify proper functionality of dynamic hmap
 	{
 		class Foo {
 		private:
@@ -120,6 +123,19 @@ int main(int argc, const char* argv[]) {
 		std::cout << ((boost::none != optCusp) ? **optCusp : "\"cusp\" is not in map"s) << std::endl;
 		std::cout << ((boost::none != optBaz) ? **optBaz : "\"baz\" is not in map"s) << std::endl;
 	}
+	// Test moving keys from a static keys into a dynamic hmap
+	{
+		auto keys = std::forward_as_tuple(TK("foo",int), TK("bar",float), TK("baz",std::string));
+		auto myDynamicHMap = make_dynamic_hmap();
+		std::apply([&myDynamicHMap](auto&&... key) {
+			((myDynamicHMap[staticToDynamicKey(key)]), ...); }, keys);
 
+		// Make sure the correct keys of the correct types are present, and no others
+		assert(myDynamicHMap.end<int>() != myDynamicHMap.find(dK<int>("foo")));
+		assert(myDynamicHMap.end<float>() != myDynamicHMap.find(dK<float>("bar")));
+		assert(myDynamicHMap.end<std::string>() != myDynamicHMap.find(dK<std::string>("baz")));
+		assert(myDynamicHMap.end<std::string>() == myDynamicHMap.find(dK<std::string>("cusp")));
+		assert(myDynamicHMap.end<double>() == myDynamicHMap.find(dK<double>("foo")));
+	}
 	return 0;
 }
