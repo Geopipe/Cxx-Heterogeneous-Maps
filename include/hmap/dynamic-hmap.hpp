@@ -300,9 +300,10 @@ class DynamicHMap {
 	DynamicHMap(Args&& ...args)
 	: map_(std::forward<Args>(args) ...) {}
 	
-	
 	// Construct a DynamicHMap by using Key<V>, std::any pairs,
 	// casting Key<V> to KeyBase to perform type erasure.
+	DynamicHMap(std::in_place_t) { }
+
 	template<typename ...Vs>
 	DynamicHMap(std::in_place_t, Vs&& ...vs) {
 		std::array<std::pair<detail::KeyBase, std::any>, sizeof...(Vs)> argArray
