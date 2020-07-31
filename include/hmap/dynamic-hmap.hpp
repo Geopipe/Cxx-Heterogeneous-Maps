@@ -365,6 +365,10 @@ class DynamicHMap {
 		return std::make_pair(boost::make_transform_iterator<AnyCaster<V> >(iter),
 							  inserted);
 	}
+	template<typename A>
+	auto unsafe_insert_or_assign(const detail::KeyBase& kB, A&& a) {
+		return map_.insert_or_assign(kB, std::forward<A>(a));
+	}
 
 	// Extract key-value pairs from map for insert into another map
 	template <typename... Args>
