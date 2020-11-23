@@ -43,3 +43,18 @@ DynamicHMap::const_iterator DynamicHMap::cend() const {
 
 size_t DynamicHMap::size() const { return map_.size(); }
 bool DynamicHMap::empty() const { return map_.empty(); }
+
+void DynamicHMap::print(std::ostream& o) const {
+	o << "DynamicHMap Keys: ";
+	o.flush();
+	bool first = true;
+	for (const auto& pair : map_) {
+		if (!first) {
+			o << ", ";
+		} else {
+			first = false;
+		}
+		o << pair.first.key;
+	}
+	o << std::endl;
+}

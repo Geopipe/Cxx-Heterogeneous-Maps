@@ -120,6 +120,50 @@ class DynamicHMap {
 	template<typename V> using specific_value_type = std::pair<detail::KeyBase, V&>;
 	template<typename V> using const_specific_value_type = std::pair<detail::KeyBase, const V&>;
 
+  protected:
+	// Copy a value from from the map, returning a boost<const V&>
+	template <typename V>
+	boost::optional<const V&> optCopyOutOne(const detail::Key<V>& k) const {
+		boost::optional<const V&> retval;
+		if (auto it = map_.find(k); map_.cend() != it) {
+			retval.emplace(std::any_cast<const V&>(map_.at(k)));
+		}
+		return retval;
+	}
+	
+	// Copy a value from from the map, returning a boost<V&>
+	template <typename V>
+	boost::optional<V&> optCopyOutOne(const detail::Key<V>& k) {
+		boost::optional<V&> retval;
+		if (auto it = map_.find(k); map_.end() != it) {
+			retval.emplace(std::any_cast<V&>(map_.at(k)));
+		}
+		return retval;
+	}
+	
+	// Copy a value from from the map, returning a const V*
+	template <typename V>
+	const V* ptrCopyOutOne(const detail::Key<V>& k) const {
+		const V* retval = nullptr;
+		if (auto it = map_.find(k); map_.cend() != it) {
+			retval = &std::any_cast<const V&>(map_.at(k));
+		}
+		return retval;
+	}
+	
+	// Copy a value from from the map, returning a V*
+	template <typename V>
+	V* ptrCopyOutOne(const detail::Key<V>& k) {
+		V* retval = nullptr;
+		if (auto it = map_.find(k); map_.end() != it) {
+			retval = &std::any_cast<V&>(map_.at(k));
+		}
+		return retval;
+	}
+	
+	// Clear the map
+	void clear() { map_.clear(); }
+
   private:
 	
 	template<typename V>
@@ -208,46 +252,6 @@ class DynamicHMap {
 		}
 	}
 	
-	// Copy a value from from the map, returning a boost<const V&>
-	template <typename V>
-	boost::optional<const V&> optCopyOutOne(const detail::Key<V>& k) const {
-		boost::optional<const V&> retval;
-		if (auto it = map_.find(k); map_.cend() != it) {
-			retval.emplace(std::any_cast<const V&>(map_.at(k)));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a boost<V&>
-	template <typename V>
-	boost::optional<V&> optCopyOutOne(const detail::Key<V>& k) {
-		boost::optional<V&> retval;
-		if (auto it = map_.find(k); map_.end() != it) {
-			retval.emplace(std::any_cast<V&>(map_.at(k)));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a const V*
-	template <typename V>
-	const V* ptrCopyOutOne(const detail::Key<V>& k) const {
-		const V* retval = nullptr;
-		if (auto it = map_.find(k); map_.cend() != it) {
-			retval = std::any_cast<const V*>(map_.at(k));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a V*
-	template <typename V>
-	V* ptrCopyOutOne(const detail::Key<V>& k) {
-		V* retval = nullptr;
-		if (auto it = map_.find(k); map_.end() != it) {
-			retval = std::any_cast<V*>(map_.at(k));
-		}
-		return retval;
-	}
-	
 	// Insert values from boost::optional objects into the map as
 	// directed by the corresponding keys
 	template <typename... DataTypes, typename... Args, size_t... Is>
@@ -299,6 +303,7 @@ class DynamicHMap {
 	template<typename ...Args>
 	DynamicHMap(Args&& ...args)
 	: map_(std::forward<Args>(args) ...) {}
+	
 	
 	// Construct a DynamicHMap by using Key<V>, std::any pairs,
 	// casting Key<V> to KeyBase to perform type erasure.
@@ -372,7 +377,7 @@ class DynamicHMap {
 	auto extract(Args&&... args) {
 		return std::make_tuple(extractOne(args)...);
 	}
-	
+
 	// Insert key-value pairs into map from extract from another map
 	template<typename ...Types, typename ...Args>
 	void insert(std::tuple<Types...> &&tup,
@@ -400,11 +405,19 @@ class DynamicHMap {
 	// Copy values from the map, returning optionals
 	// that refer to the values.
 	template <typename... Args>
-	auto optCopyOut(Args&&... args)
+	auto optCopyOut(Args&&... args) const&
 	{
 		return std::make_tuple(optCopyOutOne(args)...);
 	}
 	
+	// Copy values from the map, returning optionals
+	// that refer to the values.
+	template <typename... Args>
+	auto optCopyOut(Args&&... args) &
+	{
+		return std::make_tuple(optCopyOutOne(args)...);
+	}
+
 	// Insert values from boost::optional objects into the map as
 	// directed by the corresponding keys
 	template<typename ...Types, typename ...Args>
@@ -414,7 +427,7 @@ class DynamicHMap {
 		                 std::index_sequence_for<Args...>{},
 		                 std::forward<Args>(args)...);
 	}
-	
+
 	// Copy values from boost::optional<V&> objects into the map as
 	// directed by the corresponding keys
 	template<typename ...Types, typename ...Args>
@@ -471,6 +484,8 @@ class DynamicHMap {
 			return 1;
 		}
 	}
+
+	void print(std::ostream& o) const;
 
 };
 

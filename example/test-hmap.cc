@@ -125,7 +125,7 @@ int main(int argc, const char* argv[]) {
 	}
 	// Test moving keys from a static keys into a dynamic hmap
 	{
-		auto keys = std::forward_as_tuple(TK("foo",int), TK("bar",float), TK("baz",std::string));
+		auto keys = std::make_tuple(TK("foo",int), TK("bar",float), TK("baz",std::string));
 		auto myDynamicHMap = make_dynamic_hmap();
 		std::apply([&myDynamicHMap](auto&&... key) {
 			((myDynamicHMap[staticToDynamicKey(key)]), ...); }, keys);
@@ -136,6 +136,18 @@ int main(int argc, const char* argv[]) {
 		assert(myDynamicHMap.end<std::string>() != myDynamicHMap.find(dK<std::string>("baz")));
 		assert(myDynamicHMap.end<std::string>() == myDynamicHMap.find(dK<std::string>("cusp")));
 		assert(myDynamicHMap.end<double>() == myDynamicHMap.find(dK<double>("foo")));
+	}
+	// Test turning static keys into dynamic keys
+	{
+		auto keys = std::make_tuple(TK("foo",int), TK("bar",float), TK("baz",std::string));
+
+		auto instantDynamicKeys = std::apply([](auto&& ...key) {
+			return std::set<detail::KeyBase>({staticToDynamicKey(key) ...});
+		}, keys);
+
+		for(const auto& keyBase : instantDynamicKeys) {
+			std::cout << keyBase.key << std::endl;
+		}
 	}
 	return 0;
 }
