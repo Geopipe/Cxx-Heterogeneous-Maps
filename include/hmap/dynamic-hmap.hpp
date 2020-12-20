@@ -144,7 +144,7 @@ class DynamicHMap {
 	                            std::index_sequence<I...>) {
 		(static_cast<void>(map_.emplace_hint(map_.cend(), std::move(a[I]))),
 		 ...);
-}
+	}
 	
 	// Move N sorted key-value pairs into array in key order in O(N) time
 	template <size_t N, typename Indices = std::make_index_sequence<N> >
