@@ -2,7 +2,7 @@
 /************************************************************************************
  *
  * Author: Thomas Dickerson
- * Copyright: 2019 - 2020, Geopipe, Inc.
+ * Copyright: 2019 - 2021, Geopipe, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -96,10 +96,10 @@ namespace detail {
 		template<class A>
 		std::pair<KeyBase, std::any>
 		operator,(A&& a) const {
-			return std::pair<KeyBase, std::any>(std::piecewise_construct,
-			                                    std::forward_as_tuple(std::cref(*((KeyBase *)this))),
-			                                    std::forward_as_tuple(std::any{std::in_place_type<V>,
-			                                                                   std::forward<A>(a)}));
+			return {std::piecewise_construct,
+			    std::forward_as_tuple(std::cref(*((KeyBase *)this))),
+			    std::forward_as_tuple(std::any{std::in_place_type<V>,
+			                                   std::forward<A>(a)})};
 		}
 	};
 }
@@ -198,7 +198,7 @@ class DynamicHMap {
 	
 	// Extract a single key-value pair from the map, returning a type tag-node handle pair
 	template <typename V>
-	auto extractOne(const detail::Key<V>& k) -> decltype(std::make_pair(k, std::move(map_.extract(k)))) {
+	decltype(auto) extractOne(const detail::Key<V>& k) {
 		return std::make_pair(k, std::move(map_.extract(k)));
 	}
 	
@@ -485,8 +485,6 @@ class DynamicHMap {
 		}
 	}
 
-	void print(std::ostream& o) const;
-
 };
 
 template<typename V>
@@ -502,4 +500,4 @@ detail::Key<std::shared_ptr<V> > dSK(const std::string& k) {
 template<typename ...Vs>
 DynamicHMap make_dynamic_hmap(Vs&& ...vs) {
 	return DynamicHMap(std::in_place, std::forward<Vs>(vs)...);
-};
+}
