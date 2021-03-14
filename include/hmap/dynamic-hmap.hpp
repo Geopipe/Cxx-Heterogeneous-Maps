@@ -2,7 +2,7 @@
 /************************************************************************************
  *
  * Author: Thomas Dickerson
- * Copyright: 2019 - 2020, Geopipe, Inc.
+ * Copyright: 2019 - 2021, Geopipe, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -96,10 +96,10 @@ namespace detail {
 		template<class A>
 		std::pair<KeyBase, std::any>
 		operator,(A&& a) const {
-			return std::pair<KeyBase, std::any>(std::piecewise_construct,
-			                                    std::forward_as_tuple(std::cref(*((KeyBase *)this))),
-			                                    std::forward_as_tuple(std::any{std::in_place_type<V>,
-			                                                                   std::forward<A>(a)}));
+			return {std::piecewise_construct,
+			    std::forward_as_tuple(std::cref(*((KeyBase *)this))),
+			    std::forward_as_tuple(std::any{std::in_place_type<V>,
+			                                   std::forward<A>(a)})};
 		}
 	};
 }
@@ -119,6 +119,50 @@ class DynamicHMap {
 	
 	template<typename V> using specific_value_type = std::pair<detail::KeyBase, V&>;
 	template<typename V> using const_specific_value_type = std::pair<detail::KeyBase, const V&>;
+
+  protected:
+	// Copy a value from from the map, returning a boost<const V&>
+	template <typename V>
+	boost::optional<const V&> optCopyOutOne(const detail::Key<V>& k) const {
+		boost::optional<const V&> retval;
+		if (auto it = map_.find(k); map_.cend() != it) {
+			retval.emplace(std::any_cast<const V&>(map_.at(k)));
+		}
+		return retval;
+	}
+	
+	// Copy a value from from the map, returning a boost<V&>
+	template <typename V>
+	boost::optional<V&> optCopyOutOne(const detail::Key<V>& k) {
+		boost::optional<V&> retval;
+		if (auto it = map_.find(k); map_.end() != it) {
+			retval.emplace(std::any_cast<V&>(map_.at(k)));
+		}
+		return retval;
+	}
+	
+	// Copy a value from from the map, returning a const V*
+	template <typename V>
+	const V* ptrCopyOutOne(const detail::Key<V>& k) const {
+		const V* retval = nullptr;
+		if (auto it = map_.find(k); map_.cend() != it) {
+			retval = &std::any_cast<const V&>(map_.at(k));
+		}
+		return retval;
+	}
+	
+	// Copy a value from from the map, returning a V*
+	template <typename V>
+	V* ptrCopyOutOne(const detail::Key<V>& k) {
+		V* retval = nullptr;
+		if (auto it = map_.find(k); map_.end() != it) {
+			retval = &std::any_cast<V&>(map_.at(k));
+		}
+		return retval;
+	}
+	
+	// Clear the map
+	void clear() { map_.clear(); }
 
   private:
 	
@@ -154,7 +198,7 @@ class DynamicHMap {
 	
 	// Extract a single key-value pair from the map, returning a type tag-node handle pair
 	template <typename V>
-	auto extractOne(const detail::Key<V>& k) -> decltype(std::make_pair(k, std::move(map_.extract(k)))) {
+	decltype(auto) extractOne(const detail::Key<V>& k) {
 		return std::make_pair(k, std::move(map_.extract(k)));
 	}
 	
@@ -206,46 +250,6 @@ class DynamicHMap {
 				map_.try_emplace(k, node_handle.mapped());
 			}
 		}
-	}
-	
-	// Copy a value from from the map, returning a boost<const V&>
-	template <typename V>
-	boost::optional<const V&> optCopyOutOne(const detail::Key<V>& k) const {
-		boost::optional<const V&> retval;
-		if (auto it = map_.find(k); map_.cend() != it) {
-			retval.emplace(std::any_cast<const V&>(map_.at(k)));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a boost<V&>
-	template <typename V>
-	boost::optional<V&> optCopyOutOne(const detail::Key<V>& k) {
-		boost::optional<V&> retval;
-		if (auto it = map_.find(k); map_.end() != it) {
-			retval.emplace(std::any_cast<V&>(map_.at(k)));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a const V*
-	template <typename V>
-	const V* ptrCopyOutOne(const detail::Key<V>& k) const {
-		const V* retval = nullptr;
-		if (auto it = map_.find(k); map_.cend() != it) {
-			retval = std::any_cast<const V*>(map_.at(k));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a V*
-	template <typename V>
-	V* ptrCopyOutOne(const detail::Key<V>& k) {
-		V* retval = nullptr;
-		if (auto it = map_.find(k); map_.end() != it) {
-			retval = std::any_cast<V*>(map_.at(k));
-		}
-		return retval;
 	}
 	
 	// Insert values from boost::optional objects into the map as
@@ -303,6 +307,8 @@ class DynamicHMap {
 	
 	// Construct a DynamicHMap by using Key<V>, std::any pairs,
 	// casting Key<V> to KeyBase to perform type erasure.
+	DynamicHMap(std::in_place_t) { }
+
 	template<typename ...Vs>
 	DynamicHMap(std::in_place_t, Vs&& ...vs) {
 		std::array<std::pair<detail::KeyBase, std::any>, sizeof...(Vs)> argArray
@@ -375,7 +381,7 @@ class DynamicHMap {
 	auto extract(Args&&... args) {
 		return std::make_tuple(extractOne(args)...);
 	}
-	
+
 	// Insert key-value pairs into map from extract from another map
 	template<typename ...Types, typename ...Args>
 	void insert(std::tuple<Types...> &&tup,
@@ -403,11 +409,19 @@ class DynamicHMap {
 	// Copy values from the map, returning optionals
 	// that refer to the values.
 	template <typename... Args>
-	auto optCopyOut(Args&&... args)
+	auto optCopyOut(Args&&... args) const&
 	{
 		return std::make_tuple(optCopyOutOne(args)...);
 	}
 	
+	// Copy values from the map, returning optionals
+	// that refer to the values.
+	template <typename... Args>
+	auto optCopyOut(Args&&... args) &
+	{
+		return std::make_tuple(optCopyOutOne(args)...);
+	}
+
 	// Insert values from boost::optional objects into the map as
 	// directed by the corresponding keys
 	template<typename ...Types, typename ...Args>
@@ -417,7 +431,7 @@ class DynamicHMap {
 		                 std::index_sequence_for<Args...>{},
 		                 std::forward<Args>(args)...);
 	}
-	
+
 	// Copy values from boost::optional<V&> objects into the map as
 	// directed by the corresponding keys
 	template<typename ...Types, typename ...Args>
@@ -490,4 +504,4 @@ detail::Key<std::shared_ptr<V> > dSK(const std::string& k) {
 template<typename ...Vs>
 DynamicHMap make_dynamic_hmap(Vs&& ...vs) {
 	return DynamicHMap(std::in_place, std::forward<Vs>(vs)...);
-};
+}
