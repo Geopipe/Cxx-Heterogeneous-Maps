@@ -52,10 +52,6 @@ struct KeyToKeyMapper<std::tuple<detail::KeyType<V, Cs...>, TailKs...>> {
   }
 };
 
-const auto inputKeys2 = KeyToKeyMapper<std::remove_cv<decltype(Keys2)>::type>::apply();
-const auto keyInfo2 = std::apply(make_hmap, inputKeys2);
-//const auto keyInfo3 = std::apply(make_hmap, KeyToKeyMapper<std::remove_cv<decltype(Keys3)>::type>::apply());
-
 int main(int argc, const char* argv[]) {
 	// Verify proper functionality of the static hmap (positive and negative tests)
 	{
@@ -198,8 +194,6 @@ int main(int argc, const char* argv[]) {
 		for(const auto& keyBase : instantDynamicKeys) {
 			std::cout << keyBase.key << std::endl;
 		}
-
-		std::cout << typeid(inputKeys2).name() << std::endl;
 	}
 	/*
 	// Test intelligently setting/getting keys from a dynamic HMap using information in a static HMap.
