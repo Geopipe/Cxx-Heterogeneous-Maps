@@ -6,6 +6,52 @@
 
 using namespace std::string_literals;
 
+template<typename KeyInfo>
+struct accessor {
+	template<typename StringHolder>
+	static auto& get(DynamicHMap& dynamicHMap, KeyInfo& keyInfo, StringHolder holder) {
+		return dynamicHMap[keyInfo[inferredKeyType(holder)]];
+	}
+};
+
+#define getRef(map, keyInfo, stringliteral) accessor<decltype(keyInfo)>::get(map, keyInfo, []() constexpr { return stringliteral; })
+
+/*
+class MyTestClass {
+  public:
+	const static constexpr auto Keys = std::make_tuple(TK("foo",int), TK("bar",float), TK("baz",std::string));
+
+	const static decltype(std::apply([](auto ...key) {
+			return make_hmap((TK(decltype(key)::Typeless::c_str(), detail::Key<typename decltype(key)::Value>), staticToDynamicKey(key)) ...);
+		}, MyTestClass::Keys)) KeyInfo;
+};
+
+const auto keyInfo = std::apply([](auto ...key) {
+	return make_hmap((TK(decltype(key)::Typeless::c_str(), detail::Key<typename decltype(key)::Value>), staticToDynamicKey(key)) ...);
+}, MyTestClass::Keys);
+*/
+
+const constexpr auto Keys2 = std::make_tuple(TK("foo",int));
+const constexpr auto Keys3 = std::make_tuple(TK("foo",int), TK("bar",float), TK("baz",std::string));
+
+template<typename Tuple>
+struct KeyToKeyMapper {};
+
+template<>
+struct KeyToKeyMapper<std::tuple<>> {
+  static std::tuple<> apply(){
+    return std::tuple<>();
+  }
+};
+
+template<typename V, typename ...TailKs, char ...Cs>
+struct KeyToKeyMapper<std::tuple<detail::KeyType<V, Cs...>, TailKs...>> {
+  static auto apply() {
+    using MetaKey = detail::KeyType<detail::Key<V>, Cs...>;
+    return std::tuple_cat(std::make_tuple((MetaKey(), detail::Key<V>(MetaKey::c_str()))), KeyToKeyMapper<std::tuple<TailKs...>>::apply());
+  }
+};
+
 int main(int argc, const char* argv[]) {
 	// Verify proper functionality of the static hmap (positive and negative tests)
 	{
@@ -149,5 +195,16 @@ int main(int argc, const char* argv[]) {
 			std::cout << keyBase.key << std::endl;
 		}
 	}
+	/*
+	// Test intelligently setting/getting keys from a dynamic HMap using information in a static HMap.
+	{
+		auto dynamicHMap = make_dynamic_hmap();
+		getRef(dynamicHMap, keyInfo, "bar") = 3.1415;
+		getRef(dynamicHMap, keyInfo, "foo") = 1337;
+		getRef(dynamicHMap, keyInfo, "baz") = "22/7";
+
+		std::cout << getRef(dynamicHMap, keyInfo, "bar") << ", " << getRef(dynamicHMap, keyInfo, "foo")<< ", " << getRef(dynamicHMap, keyInfo, "baz") << std::endl;
+	}
+	*/
 	return 0;
 }

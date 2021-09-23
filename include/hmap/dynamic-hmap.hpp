@@ -188,7 +188,7 @@ class DynamicHMap {
 	                            std::index_sequence<I...>) {
 		(static_cast<void>(map_.emplace_hint(map_.cend(), std::move(a[I]))),
 		 ...);
-}
+	}
 	
 	// Move N sorted key-value pairs into array in key order in O(N) time
 	template <size_t N, typename Indices = std::make_index_sequence<N> >
@@ -370,6 +370,10 @@ class DynamicHMap {
 							std::forward<Args>(args)...});
 		return std::make_pair(boost::make_transform_iterator<AnyCaster<V> >(iter),
 							  inserted);
+	}
+	template<typename A>
+	auto unsafe_insert_or_assign(const detail::KeyBase& kB, A&& a) {
+		return map_.insert_or_assign(kB, std::forward<A>(a));
 	}
 
 	// Extract key-value pairs from map for insert into another map
