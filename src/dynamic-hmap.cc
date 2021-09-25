@@ -43,3 +43,4 @@ DynamicHMap::const_iterator DynamicHMap::cend() const {
 
 size_t DynamicHMap::size() const { return map_.size(); }
 bool DynamicHMap::empty() const { return map_.empty(); }
+void DynamicHMap::clear() { map_.clear(); }

@@ -25,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <typeinfo>
@@ -79,7 +80,6 @@ namespace detail {
 		bool operator!=(const KeyBase &k) const {
 			return key != k.key || &(tag.get()) != &(k.tag.get());
 		}
-
 	};
 	
 	template<typename V>
@@ -101,6 +101,23 @@ namespace detail {
 			    std::forward_as_tuple(std::any{std::in_place_type<V>,
 			                                   std::forward<A>(a)})};
 		}
+
+	private:
+		template<typename FwdKeyBase, std::enable_if_t<std::is_same_v<std::remove_reference_t<std::remove_cv_t<FwdKeyBase>>, KeyBase>, bool> = true>
+		Key(FwdKeyBase && fwdKeyBase) 
+		: KeyBase(std::forward<FwdKeyBase>(fwdKeyBase)) {}
+	
+	public:
+
+		template<typename FwdKeyBase, std::enable_if_t<std::is_same_v<std::remove_reference_t<std::remove_cv_t<FwdKeyBase>>, KeyBase>, bool> = true>
+		static Key<V> try_rehydrate(FwdKeyBase&& fwdKeyBase) {
+			if(&(fwdKeyBase.tag.get()) == &static_cast<const KeyTagBase&>(KeyTag<V>::tag())) {
+				return Key<V>(std::forward<FwdKeyBase>(fwdKeyBase));
+			} else {
+				throw std::invalid_argument("Cannot rehydrate: mismatched KeyTagBase addresses");
+			}
+		}
+
 	};
 }
 
@@ -114,55 +131,39 @@ class DynamicHMap {
 	
   public:
 	using value_type = decltype(map_)::value_type;
-	using iterator = decltype(map_)::iterator;
 	using const_iterator = decltype(map_)::const_iterator;
 	
 	template<typename V> using specific_value_type = std::pair<detail::KeyBase, V&>;
 	template<typename V> using const_specific_value_type = std::pair<detail::KeyBase, const V&>;
 
+	static constexpr struct as_ptr_tag {} as_ptr;
+	static constexpr struct multi_tag {} multi;
+
   protected:
-	// Copy a value from from the map, returning a boost<const V&>
-	template <typename V>
-	boost::optional<const V&> optCopyOutOne(const detail::Key<V>& k) const {
-		boost::optional<const V&> retval;
-		if (auto it = map_.find(k); map_.cend() != it) {
-			retval.emplace(std::any_cast<const V&>(map_.at(k)));
-		}
-		return retval;
+	using iterator = decltype(map_)::iterator;
+	iterator begin();
+	iterator end();
+
+  public: 
+	template<typename V>
+	boost::optional<const V&> operator()(const detail::Key<V>& k) const {
+		const auto it = find(k);
+		return ((cend<V>() != it)
+		         ? boost::optional<const V&>(it->second)
+				 : boost::none);
 	}
-	
-	// Copy a value from from the map, returning a boost<V&>
-	template <typename V>
-	boost::optional<V&> optCopyOutOne(const detail::Key<V>& k) {
-		boost::optional<V&> retval;
-		if (auto it = map_.find(k); map_.end() != it) {
-			retval.emplace(std::any_cast<V&>(map_.at(k)));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a const V*
-	template <typename V>
-	const V* ptrCopyOutOne(const detail::Key<V>& k) const {
-		const V* retval = nullptr;
-		if (auto it = map_.find(k); map_.cend() != it) {
-			retval = &std::any_cast<const V&>(map_.at(k));
-		}
-		return retval;
-	}
-	
-	// Copy a value from from the map, returning a V*
-	template <typename V>
-	V* ptrCopyOutOne(const detail::Key<V>& k) {
-		V* retval = nullptr;
-		if (auto it = map_.find(k); map_.end() != it) {
-			retval = &std::any_cast<V&>(map_.at(k));
-		}
-		return retval;
+
+
+	template<typename V>
+	boost::optional<V&> operator()(const detail::Key<V>& k) {
+		const auto it = find(k);
+		return ((end<V>() != it)
+		         ? boost::optional<V&>(it->second)
+				 : boost::none);
 	}
 	
 	// Clear the map
-	void clear() { map_.clear(); }
+	void clear();
 
   private:
 	
@@ -198,14 +199,14 @@ class DynamicHMap {
 	
 	// Extract a single key-value pair from the map, returning a type tag-node handle pair
 	template <typename V>
-	decltype(auto) extractOne(const detail::Key<V>& k) {
+	decltype(auto) extract1(const detail::Key<V>& k) {
 		return std::make_pair(k, std::move(map_.extract(k)));
 	}
 	
 	// Extract a single key-value pair from the map, returning an
 	// optional that contains the value
 	template <typename V>
-	boost::optional<V> optCheckOutOne(const detail::Key<V>& k) {
+	boost::optional<V> optCheckOut1(const detail::Key<V>& k) {
 		boost::optional<V> retval;
 		auto mapNodeHandle = map_.extract(k);
 		if (mapNodeHandle) {
@@ -218,14 +219,14 @@ class DynamicHMap {
 	template <typename... DataTypes, typename... Args, size_t... Is>
 	void insertHelper(std::tuple<DataTypes...> dataTup,
 	                  std::index_sequence<Is...>, Args&&... args) {
-		(static_cast<void>(insertOne(args, std::get<Is>(dataTup).first,
+		(static_cast<void>(insert1(args, std::get<Is>(dataTup).first,
 		                             std::move(std::get<Is>(dataTup).second))),
 		 ...);
 	}
 	
 	// Insert a value from a compatible node handle into the map
 	template <typename V, typename W, typename X>
-	void insertOne(const detail::Key<V>& k, const detail::Key<W>& kPrime, X&& node_handle) {
+	void insert1(const detail::Key<V>& k, const detail::Key<W>& kPrime, X&& node_handle) {
 		static_assert(std::is_convertible_v<W, V>);
 		if (node_handle) {
 			// If allocators are type compatible, use move construction
@@ -256,7 +257,7 @@ class DynamicHMap {
 	// directed by the corresponding keys
 	template <typename... DataTypes, typename... Args, size_t... Is>
 	void optCheckInHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
-		(static_cast<void>(optCheckInOne(std::move(std::get<Is>(dataTup)),
+		(static_cast<void>(optCheckIn1(std::move(std::get<Is>(dataTup)),
 		                                 args)),
 		 ...);
 	}
@@ -264,7 +265,7 @@ class DynamicHMap {
 	// Move a value from a boost::optional object into the map as
 	// directed by the corresponding key
 	template <typename V>
-	void optCheckInOne(boost::optional<V>&& arg, const detail::Key<V>& k) {
+	void optCheckIn1(boost::optional<V>&& arg, const detail::Key<V>& k) {
 		if (boost::none != arg) {
 			std::any& vHolder = map_[k];
 			if (!vHolder.has_value()) {
@@ -279,7 +280,7 @@ class DynamicHMap {
 	// directed by the corresponding keys
 	template <typename... DataTypes, typename... Args, size_t... Is>
 	void optCopyInHelper(std::tuple<DataTypes...> dataTup, std::index_sequence<Is...>, Args&&... args) {
-		(static_cast<void>(optCopyInOne(std::move(std::get<Is>(dataTup)),
+		(static_cast<void>(optCopyIn1(std::move(std::get<Is>(dataTup)),
 		                                args)),
 		 ...);
 	}
@@ -287,7 +288,7 @@ class DynamicHMap {
 	// Copy a value from a boost::optional<V&> object into the map as
 	// directed by the corresponding key
 	template <typename V>
-	void optCopyInOne(boost::optional<V&>&& arg, const detail::Key<V>& k) {
+	void optCopyIn1(boost::optional<V&>&& arg, const detail::Key<V>& k) {
 		if (boost::none != arg) {
 			std::any& vHolder = map_[k];
 			if (!vHolder.has_value()) {
@@ -353,6 +354,10 @@ class DynamicHMap {
 		// This will throw if it's not an appropriate type
 		return std::any_cast<const V&>(map_.at(k));
 	}
+
+	const std::any& at(const detail::KeyBase& kb) const {
+		return map_.at(kb);
+	}
 	
     template<typename V, typename ...Args>
 	auto try_emplace(const detail::Key<V>& k, Args&& ...args) {
@@ -379,7 +384,7 @@ class DynamicHMap {
 	// Extract key-value pairs from map for insert into another map
 	template <typename... Args>
 	auto extract(Args&&... args) {
-		return std::make_tuple(extractOne(args)...);
+		return std::make_tuple(extract1(args)...);
 	}
 
 	// Insert key-value pairs into map from extract from another map
@@ -395,31 +400,31 @@ class DynamicHMap {
 	// that contain the values
 	template <typename... Args>
 	auto optCheckOut(Args&&... args) {
-		return std::make_tuple(optCheckOutOne(args)...);
+		return std::make_tuple(optCheckOut1(args)...);
 	}
 	
-	// Copy values from the map, returning pointers
-	// that refer to the values.
-	template <typename... Args>
-	auto ptrCopyOut(Args&&... args)
+	template <typename... Vs>
+	auto operator()(DynamicHMap::as_ptr_tag, const detail::Key<Vs>& ...ks) const
 	{
-		return std::make_tuple(ptrCopyOutOne(args)...);
+		return std::make_tuple((*this)(ks).template map<const Vs*(&)(const Vs&)>(std::addressof<Vs>).value_or(nullptr)...);
 	}
 	
-	// Copy values from the map, returning optionals
-	// that refer to the values.
-	template <typename... Args>
-	auto optCopyOut(Args&&... args) const&
+	template <typename... Vs>
+	auto operator()(DynamicHMap::as_ptr_tag, const detail::Key<Vs>& ...ks)
 	{
-		return std::make_tuple(optCopyOutOne(args)...);
+		return std::make_tuple((*this)(ks).template map<Vs*(&)(Vs&)>(std::addressof<Vs>).value_or(nullptr)...);
 	}
 	
-	// Copy values from the map, returning optionals
-	// that refer to the values.
-	template <typename... Args>
-	auto optCopyOut(Args&&... args) &
+	template <typename... Vs>
+	auto operator()(DynamicHMap::multi_tag, const detail::Key<Vs>& ...ks)
 	{
-		return std::make_tuple(optCopyOutOne(args)...);
+		return std::make_tuple((*this)(ks)...);
+	}
+	
+	template <typename... Vs>
+	auto operator()(DynamicHMap::multi_tag, const detail::Key<Vs>& ...ks) const
+	{
+		return std::make_tuple((*this)(ks)...);
 	}
 
 	// Insert values from boost::optional objects into the map as
@@ -441,9 +446,6 @@ class DynamicHMap {
 		                std::index_sequence_for<Args...>{},
 						std::forward<Args>(args)...);
 	}
-	
-    iterator begin();
-	iterator end();
 
 	// Add a version of end() that can be compared against the iterator
 	// returned by find for a non-const DynamicHMap
@@ -476,6 +478,10 @@ class DynamicHMap {
 	auto find(const detail::Key<V>& k) const {
 		const_iterator found = map_.find(k);
 		return boost::make_transform_iterator<ConstAnyCaster<V> >(found);
+	}
+
+	auto find(const detail::KeyBase& kb) const {
+		return map_.find(kb);
 	}
 	
 	template<typename V>
