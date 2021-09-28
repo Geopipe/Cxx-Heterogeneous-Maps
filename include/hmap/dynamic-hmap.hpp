@@ -136,7 +136,6 @@ class DynamicHMap {
 	template<typename V> using specific_value_type = std::pair<detail::KeyBase, V&>;
 	template<typename V> using const_specific_value_type = std::pair<detail::KeyBase, const V&>;
 
-	static constexpr struct as_ptr_tag {} as_ptr;
 	static constexpr struct multi_tag {} multi;
 
   protected:
@@ -401,18 +400,6 @@ class DynamicHMap {
 	template <typename... Args>
 	auto optCheckOut(Args&&... args) {
 		return std::make_tuple(optCheckOut1(args)...);
-	}
-	
-	template <typename... Vs>
-	auto operator()(DynamicHMap::as_ptr_tag, const detail::Key<Vs>& ...ks) const
-	{
-		return std::make_tuple((*this)(ks).template map<const Vs*(&)(const Vs&)>(std::addressof<Vs>).value_or(nullptr)...);
-	}
-	
-	template <typename... Vs>
-	auto operator()(DynamicHMap::as_ptr_tag, const detail::Key<Vs>& ...ks)
-	{
-		return std::make_tuple((*this)(ks).template map<Vs*(&)(Vs&)>(std::addressof<Vs>).value_or(nullptr)...);
 	}
 	
 	template <typename... Vs>
