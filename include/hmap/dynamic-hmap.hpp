@@ -175,7 +175,7 @@ class DynamicHMap {
 	template<typename V> using specific_value_type = std::pair<detail::KeyBase, V&>; ///< Type-safe key-value pairs
 	template<typename V> using const_specific_value_type = std::pair<detail::KeyBase, const V&>; ///< Immutable type-safe key-value pairs.
 
-	static constexpr struct multi_tag {} multi; ///< [tag-dispatch](https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Tag_Dispatching) for `operator()`.
+	static constexpr struct multi_tag {} multi {}; ///< [tag-dispatch](https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Tag_Dispatching) for `operator()`.
 
   protected:
 	using iterator = decltype(map_)::iterator; ///< Exposing a mutable iterator on backing `std::any` store breaks soundness.
