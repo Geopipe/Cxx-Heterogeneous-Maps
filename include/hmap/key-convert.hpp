@@ -1,8 +1,10 @@
 #pragma once
 /************************************************************************************
- *
- * Author: Thomas Dickerson
- * Copyright: 2019 - 2020, Geopipe, Inc.
+ * @file key-convert.hpp Convert key types from @ref hmap.hpp for use 
+ * with @ref @dynamic-hmap.hpp.
+ * 
+ * @author Thomas Dickerson
+ * @copyright 2019 - 2020, Geopipe, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -22,6 +24,7 @@
 #include <hmap/hmap.hpp>
 #include <hmap/dynamic-hmap.hpp>
 
+/// Convert `detail::KeyType<Value>` (for a static `HMap`) to `detail::Key<Value>` (for a `DynamicHMap`)
 template<typename Value, char ...Cs>
 detail::Key<Value> staticToDynamicKey(detail::KeyType<Value, Cs...>) {
 	return dK<Value>(detail::KeyType<Value, Cs...>::c_str());
