@@ -191,15 +191,13 @@ namespace detail {
 	/// Turns a constexpr lambda into a KeyType encoding its return value.
 	template<typename Value, typename StringHolder, size_t ...I>
 	constexpr auto keyTypeImpl(StringHolder holder, std::index_sequence<I...>) {
-		constexpr std::string_view text = holder();
-		return KeyType<Value, text[I] ...>();
+		return KeyType<Value, holder()[I] ...>();
 	}
 	
 	/// Turns a constexpr lambda into a CharList encoding its return value.
 	template<typename StringHolder, size_t ...I>
 	constexpr auto inferredKeyTypeImpl(StringHolder holder, std::index_sequence<I...>) {
-		constexpr std::string_view text = holder();
-		return CharList<text[I] ...>();
+		return CharList<holder()[I] ...>();
 	}
 	/**
 	 * @}
