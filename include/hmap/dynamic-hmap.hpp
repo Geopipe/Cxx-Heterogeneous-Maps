@@ -36,6 +36,7 @@
 #include <typeinfo>
 #include <type_traits>
 #include <utility>
+#include <sstream>
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/optional/optional.hpp>
@@ -337,6 +338,12 @@ class DynamicHMap {
 		}
 	}
 
+	[[noreturn]] void keyNotFound(const detail::KeyBase& k) const {
+		std::stringstream msg;
+		msg << "DynamicHMap: key '" << k.key.c_str() << "' not present" << std::endl;
+		throw std::out_of_range(msg.str());
+	}
+
   public:
 	/// Pass args through to the underlying `std::map`.
 	template<typename ...Args>
@@ -375,13 +382,21 @@ class DynamicHMap {
 	/// Find a matching key value pair and return a reference to the value
 	template<typename V>
 	V& at(const detail::Key<V>& k) {
-		return std::any_cast<V&>(map_.at(k));
+		try {
+			return std::any_cast<V&>(map_.at(k));
+		} catch (const std::out_of_range& e) {
+			keyNotFound(k);
+		}
 	}
 	/// Find a matching key value pair and return a reference to the value
 	template<typename V>
 	const V& at(const detail::Key<V>& k) const {
 		// This will throw if it's not an appropriate type
-		return std::any_cast<const V&>(map_.at(k));
+		try {
+			return std::any_cast<const V&>(map_.at(k));
+		} catch (const std::out_of_range& e) {
+			keyNotFound(k);
+		}
 	}
 	/*****************************************************************
 	 * Find a matching key value pair and return a `const` reference
@@ -390,7 +405,11 @@ class DynamicHMap {
 	 * No non-`const` overload is provided as that permit unsound stores.
 	 *****************************************************************/
 	const std::any& at(const detail::KeyBase& kb) const {
-		return map_.at(kb);
+		try {
+			return map_.at(kb);
+		} catch (const std::out_of_range& e) {
+			keyNotFound(kb);
+		}
 	}
 	
 	/// cf. `std::map::try_emplace`.
