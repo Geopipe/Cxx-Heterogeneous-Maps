@@ -6,7 +6,7 @@
  * data for which you don't have a formal/complete schema).
  * 
  * @author Thomas Dickerson
- * @copyright 2019 - 2021, Geopipe, Inc.
+ * @copyright 2019 - 2022, Geopipe, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -36,7 +36,6 @@
 #include <typeinfo>
 #include <type_traits>
 #include <utility>
-#include <sstream>
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/optional/optional.hpp>
@@ -44,7 +43,8 @@
 namespace detail {
 	/// Polymorphic base class for `KeyTag`s.
 	struct KeyTagBase {
-		virtual ~KeyTagBase();
+		virtual ~KeyTagBase() = default;
+		virtual const std::type_info& info() const = 0;
 	};
 }
 
@@ -61,6 +61,11 @@ class KeyTag : public detail::KeyTagBase {
 	KeyTag() = default;
 	KeyTag(const KeyTag&) = delete;
 	KeyTag(KeyTag&&) = delete;
+
+	const std::type_info& info() const override {
+		return typeid(V);
+	}
+
   public:
 	/// Obtain the singleton
 	static const KeyTag<V>& tag() {
@@ -81,23 +86,28 @@ namespace detail {
 		KeyBase(KeyBase&&) = default;
 		KeyBase& operator= (const KeyBase&) = default;
 		KeyBase& operator= (KeyBase&&) = default;
-		virtual ~KeyBase();
+		virtual ~KeyBase() = default;
 		
 		/// Compare lexicographically first, then by type tag.
-		bool operator<(const KeyBase &k) const {
+		inline bool operator<(const KeyBase &k) const {
 			return key < k.key ||
 		           (key == k.key && &(tag.get()) < &(k.tag.get()));
 		}
 
 		/// @return `true` if both fields are identical, `false` otherwise
-		bool operator==(const KeyBase &k) const {
+		inline bool operator==(const KeyBase &k) const {
 			return key == k.key &&
 			       &(tag.get()) == &(k.tag.get());
 		}
 	
 		/// @return `false` if both fields are identical, `true` otherwise
-		bool operator!=(const KeyBase &k) const {
+		inline bool operator!=(const KeyBase &k) const {
 			return key != k.key || &(tag.get()) != &(k.tag.get());
+		}
+
+		/// @return The typeid of template parameter used to instatiate the type tag.
+		inline const std::type_info& info() const {
+			return tag.get().info();
 		}
 	};
 	
@@ -338,15 +348,16 @@ class DynamicHMap {
 		}
 	}
 
-	[[noreturn]] void keyNotFound(const detail::KeyBase& k) const {
-		std::stringstream msg;
-		msg << "DynamicHMap: key '" << k.key.c_str() << "' not present" << std::endl;
-		throw std::out_of_range(msg.str());
-	}
+	[[noreturn]] static void keyNotFound(const detail::KeyBase& k);
 
   public:
+	DynamicHMap(DynamicHMap &&) = default;
+	DynamicHMap& operator=(DynamicHMap &&) = default;
+	DynamicHMap(const DynamicHMap &) = default;
+	DynamicHMap& operator=(const DynamicHMap &) = default;
+
 	/// Pass args through to the underlying `std::map`.
-	template<typename ...Args>
+	template<typename ...Args, std::enable_if_t<std::is_constructible_v<std::map<detail::KeyBase, std::any>, Args...>, bool> = true>
 	DynamicHMap(Args&& ...args)
 	: map_(std::forward<Args>(args) ...) {}
 
