@@ -1,7 +1,7 @@
 /************************************************************************************
  *
  * Author: Thomas Dickerson
- * Copyright: 2019 - 2020, Geopipe, Inc.
+ * Copyright: 2019 - 2022, Geopipe, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -20,12 +20,7 @@
 
 #include <hmap/dynamic-hmap.hpp>
 
-// The vtables for these classes will be generated here
-namespace detail {
-	KeyTagBase::~KeyTagBase() {}
-	
-	KeyBase::~KeyBase() {}
-}
+#include <sstream>
 
 DynamicHMap::iterator DynamicHMap::begin() {
 	return map_.begin();
@@ -44,3 +39,8 @@ DynamicHMap::const_iterator DynamicHMap::cend() const {
 size_t DynamicHMap::size() const { return map_.size(); }
 bool DynamicHMap::empty() const { return map_.empty(); }
 void DynamicHMap::clear() { map_.clear(); }
+[[noreturn]] void DynamicHMap::keyNotFound(const detail::KeyBase& k) {
+	std::stringstream msg;
+	msg << "DynamicHMap: '" << k.key << "' (type '" << k.info().name() << "') not present." << std::endl;
+	throw std::out_of_range(msg.str());
+}
